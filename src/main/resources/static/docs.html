@@ -149,7 +149,10 @@
     <a href="#submissions"><span class="dot" style="background:#22c55e"></span>Submissions</a>
     <a href="#testrun"><span class="dot" style="background:#00d4aa"></span>Test Run</a>
     <a href="#problems"><span class="dot" style="background:#3b82f6"></span>Problems</a>
-    <a href="#admin"><span class="dot" style="background:#a855f7"></span>Admin</a>
+    <a href="#admin"><span class="dot" style="background:#a855f7"></span>Admin — Problems</a>
+    <a href="#subtasks"><span class="dot" style="background:#a855f7"></span>Admin — Subtasks</a>
+    <a href="#checker"><span class="dot" style="background:#a855f7"></span>Admin — Checker</a>
+    <a href="#import"><span class="dot" style="background:#a855f7"></span>Admin — Import ZIP</a>
     <a href="#webhook"><span class="dot" style="background:#f59e0b"></span>Webhook</a>
   </div>
 
@@ -460,14 +463,17 @@ HEADERS    = {<span class="s">"X-API-Key"</span>: <span class="s">"your_api_key"
         <div class="code-block">
           <div class="code-header"><span>Response — 200 OK</span></div>
           <pre>{
-  <span class="p">"id"</span>:            <span class="n">1</span>,
-  <span class="p">"slug"</span>:          <span class="s">"a-plus-b"</span>,
-  <span class="p">"title"</span>:         <span class="s">"A + B"</span>,
-  <span class="p">"description"</span>:   <span class="s">"Nhập hai số nguyên A, B. In ra tổng A+B."</span>,
-  <span class="p">"timeLimitMs"</span>:   <span class="n">1000</span>,
-  <span class="p">"memoryLimitKb"</span>: <span class="n">65536</span>,
-  <span class="p">"published"</span>:     <span class="k">true</span>,
-  <span class="p">"createdAt"</span>:     <span class="s">"2026-04-17T08:00:00"</span>
+  <span class="p">"id"</span>:              <span class="n">1</span>,
+  <span class="p">"slug"</span>:            <span class="s">"a-plus-b"</span>,
+  <span class="p">"title"</span>:           <span class="s">"A + B"</span>,
+  <span class="p">"description"</span>:     <span class="s">"Nhập hai số nguyên A, B. In ra tổng A+B."</span>,
+  <span class="p">"timeLimitMs"</span>:     <span class="n">1000</span>,
+  <span class="p">"memoryLimitKb"</span>:   <span class="n">65536</span>,
+  <span class="p">"published"</span>:       <span class="k">true</span>,
+  <span class="p">"checkerType"</span>:     <span class="s">"EXACT"</span>,     <span class="c">// "EXACT" | "CUSTOM"</span>
+  <span class="p">"checkerLanguage"</span>: <span class="k">null</span>,
+  <span class="p">"hasChecker"</span>:      <span class="k">false</span>,
+  <span class="p">"createdAt"</span>:       <span class="s">"2026-04-17T08:00:00"</span>
 }</pre>
         </div>
       </div>
@@ -581,8 +587,9 @@ HEADERS    = {<span class="s">"X-API-Key"</span>: <span class="s">"your_api_key"
           <tr><th>Form field</th><th>Type</th><th>Mô tả</th></tr>
           <tr><td><code>input</code></td><td>file</td><td>File input (.in)</td></tr>
           <tr><td><code>output</code></td><td>file</td><td>File output expected (.out)</td></tr>
-          <tr><td><code>score</code></td><td><code>number</code></td><td>Điểm của test case này (mặc định 1)</td></tr>
+          <tr><td><code>score</code></td><td><code>number</code></td><td>Điểm của test case này (mặc định 1, bỏ qua nếu dùng subtask)</td></tr>
           <tr><td><code>isSample</code></td><td><code>boolean</code></td><td>Hiển thị public, dùng cho Test Run (mặc định false)</td></tr>
+          <tr><td><code>subtaskId</code></td><td><code>number</code></td><td>ID subtask để gán test case này vào (tùy chọn)</td></tr>
         </table>
         <div class="code-block">
           <div class="code-header"><span>bash — upload từng file</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
@@ -635,6 +642,170 @@ curl -X POST http://&lt;server-ip&gt;:8080/api/v1/admin/problems/<span class="n"
 <span class="c"># 3. Publish</span>
 curl -X POST http://&lt;server-ip&gt;:8080/api/v1/admin/problems/<span class="n">1</span>/publish \
   -H <span class="s">"X-API-Key: ADMIN_KEY"</span></pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- Subtasks -->
+  <div class="section" id="subtasks">
+    <div class="section-title"><span>🏷️</span>Subtask Scoring</div>
+    <div class="alert info">ℹ️ Subtask nhóm các test case lại. Subtask chỉ được điểm khi <strong>tất cả</strong> test case trong nhóm đều AC (all-or-nothing). Test case không thuộc subtask nào vẫn tính điểm riêng từng case.</div>
+
+    <p style="font-size:11px;font-weight:700;margin:20px 0 10px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px">CRUD SUBTASKS</p>
+    <table style="margin-bottom:20px">
+      <tr><th>Method</th><th>Endpoint</th><th>Mô tả</th></tr>
+      <tr><td><span class="method GET" style="display:inline-block">GET</span></td><td><code>/api/v1/admin/problems/{id}/subtasks</code></td><td>Danh sách subtask của problem</td></tr>
+      <tr><td><span class="method POST" style="display:inline-block">POST</span></td><td><code>/api/v1/admin/problems/{id}/subtasks</code></td><td>Tạo subtask mới</td></tr>
+      <tr><td><span class="method DELETE" style="display:inline-block">DELETE</span></td><td><code>/api/v1/admin/problems/{id}/subtasks/{subtaskId}</code></td><td>Xóa subtask (test case giữ nguyên, không còn subtask)</td></tr>
+    </table>
+
+    <div class="endpoint">
+      <div class="endpoint-header">
+        <span class="method POST">POST</span>
+        <span class="endpoint-path">/api/v1/admin/problems/{id}/subtasks</span>
+        <span class="badge admin">Admin</span>
+        <span class="endpoint-desc">Tạo subtask</span>
+      </div>
+      <div class="endpoint-body">
+        <table style="margin:12px 0 8px">
+          <tr><th>Field</th><th>Type</th><th>Mô tả</th></tr>
+          <tr><td><code>name</code></td><td><code>string</code></td><td>Tên subtask, ví dụ "Subtask 1 — n ≤ 1000"</td></tr>
+          <tr><td><code>score</code></td><td><code>number</code></td><td>Điểm nhận khi pass toàn bộ test trong subtask</td></tr>
+          <tr><td><code>orderIndex</code></td><td><code>number</code></td><td>Thứ tự hiển thị (tùy chọn, tự tăng nếu bỏ)</td></tr>
+        </table>
+        <div class="code-block">
+          <div class="code-header"><span>bash — Ví dụ tạo 2 subtask</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+          <pre><span class="c"># Tạo subtask 1</span>
+curl -X POST http://&lt;server-ip&gt;:8080/api/v1/admin/problems/<span class="n">1</span>/subtasks \
+  -H <span class="s">"X-API-Key: ADMIN_KEY"</span> -H <span class="s">"Content-Type: application/json"</span> \
+  -d <span class="s">'{"name":"Subtask 1 — n ≤ 1000","score":30}'</span>
+<span class="c"># → {"id":1,"name":"Subtask 1 — n ≤ 1000","score":30,"orderIndex":0}</span>
+
+<span class="c"># Upload test case gán vào subtask 1</span>
+curl -X POST http://&lt;server-ip&gt;:8080/api/v1/admin/problems/<span class="n">1</span>/test-cases \
+  -H <span class="s">"X-API-Key: ADMIN_KEY"</span> \
+  -F <span class="s">"input=@tc1.in"</span> -F <span class="s">"output=@tc1.out"</span> \
+  -F <span class="s">"score=0"</span> -F <span class="s">"subtaskId=1"</span></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Checker -->
+  <div class="section" id="checker">
+    <div class="section-title"><span>⚖️</span>Custom Checker (Special Judge)</div>
+    <p style="color:var(--muted);font-size:14px;margin-bottom:16px">Mặc định server so sánh output <strong>chính xác từng ký tự</strong> (EXACT). Với bài chấp nhận nhiều đáp án (floating point, sắp xếp tùy ý...) bạn cần custom checker.</p>
+
+    <div class="alert tip">💡 Checker được compile 1 lần và lưu lại. Mỗi lần chấm, checker chạy trong Docker với 3 đối số: <code>&lt;input&gt; &lt;expected&gt; &lt;actual&gt;</code>. Exit code <code>0</code> = AC, khác = WA.</div>
+
+    <div class="endpoint">
+      <div class="endpoint-header">
+        <span class="method POST">POST</span>
+        <span class="endpoint-path">/api/v1/admin/problems/{id}/checker</span>
+        <span class="badge admin">Admin</span>
+        <span class="endpoint-desc">Upload & compile checker (multipart)</span>
+      </div>
+      <div class="endpoint-body">
+        <table style="margin:12px 0 8px">
+          <tr><th>Form field</th><th>Type</th><th>Mô tả</th></tr>
+          <tr><td><code>language</code></td><td><code>string</code></td><td><code>cpp</code> · <code>java</code> · <code>python</code></td></tr>
+          <tr><td><code>source</code></td><td>file</td><td>Source code của checker</td></tr>
+        </table>
+        <div class="code-block">
+          <div class="code-header"><span>checker.cpp — so sánh số thực (sai số 1e-6)</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+          <pre><span class="k">#include</span> <span class="s">&lt;bits/stdc++.h&gt;</span>
+<span class="k">using namespace</span> std;
+<span class="k">int</span> <span class="p">main</span>(<span class="k">int</span> argc, <span class="k">char</span>* argv[]) {
+    ifstream expected(argv[<span class="n">2</span>]), actual(argv[<span class="n">3</span>]);
+    <span class="k">double</span> a, b;
+    expected >> a; actual >> b;
+    <span class="k">return</span> abs(a - b) < <span class="n">1e-6</span> ? <span class="n">0</span> : <span class="n">1</span>;
+}</pre>
+        </div>
+        <div class="code-block">
+          <div class="code-header"><span>bash — Upload checker</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+          <pre>curl -X POST http://&lt;server-ip&gt;:8080/api/v1/admin/problems/<span class="n">1</span>/checker \
+  -H <span class="s">"X-API-Key: ADMIN_KEY"</span> \
+  -F <span class="s">"language=cpp"</span> \
+  -F <span class="s">"source=@checker.cpp"</span></pre>
+        </div>
+      </div>
+    </div>
+
+    <div class="endpoint">
+      <div class="endpoint-header">
+        <span class="method DELETE">DELETE</span>
+        <span class="endpoint-path">/api/v1/admin/problems/{id}/checker</span>
+        <span class="badge admin">Admin</span>
+        <span class="endpoint-desc">Gỡ checker, chuyển về EXACT match</span>
+      </div>
+      <div class="endpoint-body"><p style="color:var(--muted);font-size:13.5px;margin-top:12px">Trả về <code>ProblemResponse</code> với <code>checkerType: "EXACT"</code>.</p></div>
+    </div>
+  </div>
+
+  <!-- Import ZIP -->
+  <div class="section" id="import">
+    <div class="section-title"><span>📦</span>Import Problem từ ZIP</div>
+    <p style="color:var(--muted);font-size:14px;margin-bottom:16px">Tạo problem, upload tất cả test case, cấu hình subtask và checker chỉ trong một lần import.</p>
+
+    <div class="endpoint">
+      <div class="endpoint-header">
+        <span class="method POST">POST</span>
+        <span class="endpoint-path">/api/v1/admin/problems/import</span>
+        <span class="badge admin">Admin</span>
+        <span class="endpoint-desc">Import problem từ file .zip (multipart)</span>
+      </div>
+      <div class="endpoint-body">
+        <table style="margin:12px 0 8px">
+          <tr><th>Form field</th><th>Mô tả</th></tr>
+          <tr><td><code>file</code></td><td>File .zip theo cấu trúc bên dưới</td></tr>
+        </table>
+
+        <p style="font-weight:700;font-size:13px;margin-bottom:8px">Cấu trúc ZIP:</p>
+        <div class="code-block">
+          <div class="code-header"><span>Cấu trúc thư mục trong ZIP</span></div>
+          <pre><span class="n">problem.yml</span>        <span class="c">← bắt buộc</span>
+<span class="n">tests/</span>
+  <span class="s">1.in</span> / <span class="s">1.out</span>      <span class="c">← cặp test (tên tùy ý, cùng basename)</span>
+  <span class="s">2.in</span> / <span class="s">2.out</span>
+  <span class="s">sample1.in</span> / <span class="s">sample1.out</span>  <span class="c">← tên bắt đầu "sample"/"ex" → tự mark isSample</span>
+<span class="n">subtasks.yml</span>       <span class="c">← tùy chọn</span>
+<span class="n">checker.cpp</span>        <span class="c">← tùy chọn (tự compile)</span></pre>
+        </div>
+
+        <p style="font-weight:700;font-size:13px;margin:16px 0 8px"><code>problem.yml</code></p>
+        <div class="code-block">
+          <div class="code-header"><span>YAML</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+          <pre><span class="n">slug</span>: <span class="s">a-plus-b</span>
+<span class="n">title</span>: <span class="s">"A + B Problem"</span>
+<span class="n">description</span>: <span class="s">"Nhập hai số nguyên a, b. In ra a+b."</span>
+<span class="n">timeLimitMs</span>: <span class="v">1000</span>
+<span class="n">memoryLimitKb</span>: <span class="v">262144</span></pre>
+        </div>
+
+        <p style="font-weight:700;font-size:13px;margin:16px 0 8px"><code>subtasks.yml</code> (nếu có)</p>
+        <div class="code-block">
+          <div class="code-header"><span>YAML</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+          <pre>- <span class="n">name</span>: <span class="s">"Subtask 1 — n ≤ 100"</span>
+  <span class="n">score</span>: <span class="v">30</span>
+  <span class="n">tests</span>: [<span class="s">"1"</span>, <span class="s">"2"</span>]      <span class="c"># tên file không kèm đuôi</span>
+
+- <span class="n">name</span>: <span class="s">"Subtask 2 — n ≤ 10^9"</span>
+  <span class="n">score</span>: <span class="v">70</span>
+  <span class="n">tests</span>: [<span class="s">"3"</span>, <span class="s">"4"</span>, <span class="s">"5"</span>]</pre>
+        </div>
+
+        <div class="code-block">
+          <div class="code-header"><span>bash</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+          <pre><span class="c"># Nén và import</span>
+cd my-problem && zip -r ../my-problem.zip .
+
+curl -X POST http://&lt;server-ip&gt;:8080/api/v1/admin/problems/import \
+  -H <span class="s">"X-API-Key: ADMIN_KEY"</span> \
+  -F <span class="s">"file=@my-problem.zip"</span></pre>
+        </div>
+
+        <div class="alert tip">💡 Hoặc dùng Admin Panel → Problems → <strong>📦 Import ZIP</strong> — có preview nội dung ZIP trước khi import.</div>
       </div>
     </div>
   </div>
@@ -714,12 +885,23 @@ X-RateLimit-Reset:     <span class="s">2026-04-17T10:00:00Z</span></pre>
   <div class="section" id="languages">
     <div class="section-title"><span>💻</span>Ngôn ngữ hỗ trợ</div>
     <table>
-      <tr><th>Giá trị</th><th>Ngôn ngữ</th><th>Runtime</th><th>File</th></tr>
+      <tr><th>Giá trị</th><th>Ngôn ngữ</th><th>Runtime mặc định</th><th>File</th></tr>
       <tr><td><code>cpp</code></td><td>C++</td><td>GCC 13 · <code>g++ -O2 -std=c++17</code></td><td><code>solution.cpp</code></td></tr>
       <tr><td><code>java</code></td><td>Java</td><td>Eclipse Temurin 21 · <code>javac</code></td><td><code>Solution.java</code></td></tr>
-      <tr><td><code>python</code></td><td>Python</td><td>Python 3.12</td><td><code>solution.py</code></td></tr>
+      <tr><td><code>python</code></td><td>Python</td><td>Python 3.12-slim</td><td><code>solution.py</code></td></tr>
     </table>
     <div class="alert info" style="margin-top:16px">ℹ️ Java: class phải tên là <strong>Solution</strong> (có method <code>main</code>).</div>
+    <div class="alert tip" style="margin-top:8px">💡 Ngôn ngữ được cấu hình trong <code>application.yml</code> (hoặc biến môi trường). Có thể thêm ngôn ngữ mới, đổi Docker image, thay compile/run command mà không cần sửa code.</div>
+    <div class="code-block" style="margin-top:12px">
+      <div class="code-header"><span>application.yml — ví dụ thêm Go</span></div>
+      <pre>judge:
+  languages:
+    go:
+      image: <span class="s">golang:1.22</span>
+      source-file: <span class="s">solution.go</span>
+      compile-cmd: <span class="s">"go build -o solution solution.go"</span>
+      run-cmd: <span class="s">"./solution"</span></pre>
+    </div>
     <div class="card" style="margin-top:16px">
       <div class="card-title">Sandbox constraints (mỗi lần chạy)</div>
       <ul style="margin-top:8px">
