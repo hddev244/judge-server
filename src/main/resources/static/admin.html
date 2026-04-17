@@ -421,20 +421,43 @@ code{font-family:var(--mono);font-size:12px;background:var(--surface2);padding:2
 
 <!-- Import ZIP Modal -->
 <div class="modal-backdrop" id="modal-import">
-  <div class="modal">
+  <div class="modal" style="max-width:560px">
     <h3>📦 Import Problem từ ZIP</h3>
-    <div class="alert alert-info" style="margin-bottom:14px;font-size:12px">
-      ZIP phải chứa: <code>problem.yml</code>, <code>tests/*.in</code> / <code>tests/*.out</code>.<br>
-      Tùy chọn: <code>subtasks.yml</code>, <code>checker.cpp</code>.
-    </div>
-    <div class="upload-zone" id="zone-import" onclick="document.getElementById('file-import').click()">
-      <p>📂 Click để chọn file .zip</p>
+
+    <!-- Hướng dẫn thu gọn -->
+    <details style="margin-bottom:14px">
+      <summary style="font-size:12px;color:var(--accent);cursor:pointer;user-select:none">📋 Xem cấu trúc ZIP chuẩn</summary>
+      <div style="margin-top:10px;background:var(--surface2);border-radius:8px;padding:12px 14px;font-size:12px;font-family:var(--mono);line-height:1.8;color:var(--muted)">
+        <span style="color:var(--accent)">problem.yml</span>      <span style="color:#555">← bắt buộc</span><br>
+        <span style="color:var(--text)">tests/</span><br>
+        &nbsp;&nbsp;<span style="color:#80cbc4">1.in</span> / <span style="color:#86efac">1.out</span><br>
+        &nbsp;&nbsp;<span style="color:#80cbc4">2.in</span> / <span style="color:#86efac">2.out</span><br>
+        <span style="color:var(--muted)">subtasks.yml</span>      <span style="color:#555">← tùy chọn</span><br>
+        <span style="color:var(--muted)">checker.cpp</span>       <span style="color:#555">← tùy chọn</span>
+        <hr style="border-color:var(--border);margin:10px 0"/>
+        <span style="color:var(--accent)">problem.yml</span> tối thiểu:<br>
+        <span style="color:#f59e0b">slug</span>: a-plus-b<br>
+        <span style="color:#f59e0b">title</span>: "A + B Problem"<br>
+        <span style="color:#f59e0b">timeLimitMs</span>: 1000<br>
+        <span style="color:#f59e0b">memoryLimitKb</span>: 262144
+      </div>
+    </details>
+
+    <!-- Drop zone -->
+    <div class="upload-zone" id="zone-import"
+         onclick="document.getElementById('file-import').click()"
+         style="margin-bottom:12px">
+      <p id="import-zone-text">📂 Click hoặc kéo thả file .zip vào đây</p>
       <div class="file-name" id="fname-import"></div>
     </div>
-    <input type="file" id="file-import" hidden accept=".zip" onchange="showFile(this,'fname-import','zone-import')"/>
+    <input type="file" id="file-import" hidden accept=".zip" onchange="previewImportZip(this)"/>
+
+    <!-- Preview kết quả đọc ZIP -->
+    <div id="import-preview"></div>
+
     <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeModal('modal-import')">Hủy</button>
-      <button class="btn btn-primary" id="btn-do-import" onclick="doImport()">Import</button>
+      <button class="btn btn-ghost" onclick="closeImportModal()">Hủy</button>
+      <button class="btn btn-primary" id="btn-do-import" onclick="doImport()" disabled>Import</button>
     </div>
   </div>
 </div>
@@ -1123,24 +1146,121 @@ async function removeChecker() {
 }
 
 // ─── Import ZIP ──────────────────────────────────────────────────
+async function previewImportZip(input) {
+  const file = input.files[0];
+  if (!file) return;
+  document.getElementById('fname-import').textContent = file.name;
+  document.getElementById('zone-import').classList.add('has-file');
+  document.getElementById('import-preview').innerHTML =
+    '<div class="empty" style="padding:16px 0"><p>Đang đọc ZIP…</p></div>';
+  document.getElementById('btn-do-import').disabled = true;
+
+  try {
+    const zip = await JSZip.loadAsync(file);
+    const names = Object.keys(zip.files).filter(k => !zip.files[k].dir);
+
+    // problem.yml
+    const hasProblemYml = names.some(n => n === 'problem.yml' || n.endsWith('/problem.yml'));
+    let meta = {};
+    if (hasProblemYml) {
+      const entry = zip.files['problem.yml'] ||
+        zip.files[names.find(n => n.endsWith('/problem.yml'))];
+      const txt = await entry.async('string');
+      // simple YAML key:value parse (no deps)
+      txt.split('\n').forEach(line => {
+        const m = line.match(/^(\w+)\s*:\s*"?([^"#\n]*)"?\s*$/);
+        if (m) meta[m[1].trim()] = m[2].trim();
+      });
+    }
+
+    // test pairs
+    const ins = names.filter(n => n.endsWith('.in'));
+    const outs = names.filter(n => n.endsWith('.out'));
+    const pairs = ins.filter(n => outs.includes(n.replace(/\.in$/, '.out'))).length;
+
+    // subtasks / checker
+    const hasSubtasks = names.some(n => n === 'subtasks.yml' || n.endsWith('/subtasks.yml'));
+    const hasChecker  = names.some(n => n.endsWith('checker.cpp') || n.endsWith('checker.java') || n.endsWith('checker.py'));
+
+    const ok = hasProblemYml && pairs > 0;
+
+    document.getElementById('import-preview').innerHTML = `
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px 16px;font-size:13px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:10px">Kiểm tra ZIP</div>
+        <div style="display:flex;flex-direction:column;gap:7px">
+          ${checkRow(hasProblemYml, 'problem.yml', hasProblemYml ? '' : '— Không tìm thấy! Bắt buộc phải có.')}
+          ${checkRow(pairs > 0, `Test cases`, pairs > 0 ? `${pairs} cặp .in/.out` : '— Không tìm thấy cặp .in/.out nào!')}
+          ${checkRow(true, 'Subtasks', hasSubtasks ? 'Có subtasks.yml' : 'Không có (tùy chọn)', !hasSubtasks)}
+          ${checkRow(true, 'Checker',  hasChecker  ? 'Có checker'      : 'Không có (tùy chọn)', !hasChecker)}
+        </div>
+        ${meta.slug || meta.title ? `
+        <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:12px">
+          ${meta.slug  ? `<div><span style="color:var(--muted)">Slug:</span> <code>${escHtml(meta.slug)}</code></div>` : ''}
+          ${meta.title ? `<div><span style="color:var(--muted)">Title:</span> ${escHtml(meta.title)}</div>` : ''}
+          ${meta.timeLimitMs ? `<div><span style="color:var(--muted)">Time:</span> ${meta.timeLimitMs} ms</div>` : ''}
+          ${meta.memoryLimitKb ? `<div><span style="color:var(--muted)">Memory:</span> ${Math.round(meta.memoryLimitKb/1024)} MB</div>` : ''}
+        </div>` : ''}
+        ${!ok ? `<div style="margin-top:10px;color:var(--red);font-size:12px">⚠️ ZIP chưa đủ cấu trúc, không thể import.</div>` : ''}
+      </div>`;
+
+    document.getElementById('btn-do-import').disabled = !ok;
+  } catch(e) {
+    document.getElementById('import-preview').innerHTML =
+      `<div style="color:var(--red);font-size:12px;margin-top:8px">⚠️ Không đọc được ZIP: ${escHtml(e.message)}</div>`;
+  }
+}
+
+function checkRow(pass, label, note = '', neutral = false) {
+  const icon  = neutral ? '⬜' : pass ? '✅' : '❌';
+  const color = neutral ? 'var(--muted)' : pass ? 'var(--green)' : 'var(--red)';
+  return `<div style="display:flex;align-items:center;gap:8px">
+    <span>${icon}</span>
+    <span style="color:${color};font-weight:600">${label}</span>
+    ${note ? `<span style="color:var(--muted);font-size:12px">${escHtml(note)}</span>` : ''}
+  </div>`;
+}
+
+function closeImportModal() {
+  closeModal('modal-import');
+  document.getElementById('file-import').value = '';
+  document.getElementById('fname-import').textContent = '';
+  document.getElementById('zone-import').classList.remove('has-file');
+  document.getElementById('import-preview').innerHTML = '';
+  document.getElementById('btn-do-import').disabled = true;
+}
+
 async function doImport() {
   const file = document.getElementById('file-import').files[0];
-  if (!file) { toast('Chọn file ZIP', 'error'); return; }
+  if (!file) return;
   const btn = document.getElementById('btn-do-import');
   btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Importing...';
   try {
     const fd = new FormData();
     fd.append('file', file);
     const p = await api('/api/v1/admin/problems/import', { method: 'POST', body: fd });
-    toast(`Import thành công: ${p.slug}!`, 'success');
-    closeModal('modal-import');
-    document.getElementById('file-import').value = '';
-    document.getElementById('fname-import').textContent = '';
-    document.getElementById('zone-import').classList.remove('has-file');
+    toast(`Import thành công: "${p.title}" (${p.slug})`, 'success');
+    closeImportModal();
     loadProblems(0);
-  } catch(e) { toast('Lỗi: ' + e.message, 'error'); }
-  finally { btn.disabled = false; btn.textContent = 'Import'; }
+  } catch(e) { toast('Lỗi: ' + e.message, 'error'); btn.disabled = false; btn.textContent = 'Import'; }
 }
+
+// drag-drop cho import zone
+document.addEventListener('DOMContentLoaded', () => {
+  const zone = document.getElementById('zone-import');
+  if (!zone) return;
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.style.borderColor = 'var(--accent)'; });
+  zone.addEventListener('dragleave', () => { zone.style.borderColor = ''; });
+  zone.addEventListener('drop', e => {
+    e.preventDefault(); zone.style.borderColor = '';
+    const f = e.dataTransfer.files[0];
+    if (f) {
+      const dt = new DataTransfer(); dt.items.add(f);
+      const inp = document.getElementById('file-import');
+      inp.files = dt.files;
+      previewImportZip(inp);
+    }
+  });
+});
 
 // ─── Boot ────────────────────────────────────────────────────────
 if (apiKey) loadDashboard();
