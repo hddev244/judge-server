@@ -19,7 +19,7 @@ import java.util.Optional;
 public class ApiKeyFilter extends OncePerRequestFilter {
 
     private static final List<String> EXCLUDED = List.of(
-            "/actuator/**", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/docs.html", "/admin.html", "/solve.html"
+            "/actuator/**", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/docs.html", "/admin.html", "/solve.html", "/languages.html"
     );
 
     private final ApiKeyRepository apiKeyRepository;
