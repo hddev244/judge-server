@@ -4,14 +4,16 @@
 
 ## Tính năng
 
-- **Chấm bài tự động** — C++ (GCC 13), Java 21, Python 3.12
+- **Chấm bài tự động** — C++ (GCC 13), Java 21, Python 3.12 (cấu hình qua YAML/env)
 - **Docker sandbox** — `--network none`, memory/CPU limit, read-only filesystem
 - **Test Run** — chạy test mẫu đồng bộ, không lưu DB
-- **Queue** — Redis BRPOP, 4 worker threads song song
-- **Webhook** — callback khi chấm xong, HMAC-SHA256 signature, auto-retry
+- **Queue** — Redis BRPOP, số worker cấu hình được
+- **Subtask scoring** — nhóm test case theo subtask, chấm all-or-nothing
+- **Custom checker** — special judge: compile checker C++/Java/Python, chạy với `<input> <expected> <actual>`
+- **Import problem từ ZIP** — `problem.yml` + `tests/*.in/*.out` + `subtasks.yml` + `checker.cpp`
+- **Webhook** — callback khi chấm xong, auto-retry
 - **Rate limiting** — Bucket4j, per API key
-- **Admin Panel** — quản lý problem, test case (upload ZIP batch), submissions, API keys
-- **Trang làm bài** — editor với template, kiểm tra + nộp bài
+- **Admin Panel** — quản lý problem, subtask, checker, test case (upload ZIP batch), submissions, API keys
 
 ## Stack
 
@@ -24,27 +26,17 @@
 | Rate limit | Bucket4j |
 | Build | Maven, multi-stage Dockerfile |
 
-## Cấu trúc
-
-```
-src/main/java/com/judge/
-├── api/          REST controllers + DTOs
-├── domain/       JPA entities
-├── service/      Business logic
-├── judge/        DockerRunner, JudgeService, JudgeWorker
-├── queue/        Redis queue
-├── webhook/      Async callback + retry
-├── security/     ApiKeyFilter, RateLimitFilter
-└── exception/    GlobalExceptionHandler
-```
-
-## Khởi chạy
+## Khởi chạy nhanh
 
 **Yêu cầu:** Docker, Docker Compose
 
 ```bash
 git clone https://github.com/hddev244/judge-server.git
 cd judge-server
+
+# Copy cấu hình môi trường
+cp .env.example .env
+# Chỉnh sửa .env nếu cần (DB password, port, ...)
 
 # Pull sandbox images (lần đầu)
 bash scripts/init-images.sh
@@ -60,6 +52,107 @@ docker compose up -d
 curl http://localhost:8080/actuator/health
 ```
 
+Lần đầu khởi động, tạo API key admin:
+
+```bash
+# Seed API key admin trực tiếp vào DB
+docker compose exec postgres psql -U judge judgedb -c \
+  "INSERT INTO api_keys(key,client_name,is_active,is_admin,rate_limit_per_hour) \
+   VALUES ('sk_admin_local','admin',true,true,9999);"
+```
+
+## Cấu hình ngôn ngữ
+
+Ngôn ngữ được cấu hình trong `application.yml` (hoặc qua biến môi trường):
+
+```yaml
+judge:
+  languages:
+    cpp:
+      image: ${JUDGE_LANG_CPP_IMAGE:gcc:13}
+      source-file: solution.cpp
+      compile-cmd: "g++ -O2 -std=c++17 -o solution solution.cpp"
+      run-cmd: "./solution"
+    java:
+      image: ${JUDGE_LANG_JAVA_IMAGE:eclipse-temurin:21}
+      source-file: Solution.java
+      compile-cmd: "javac -encoding UTF-8 Solution.java"
+      run-cmd: "java -cp /code -Xmx{mem}m Solution"
+    python:
+      image: ${JUDGE_LANG_PYTHON_IMAGE:python:3.12-slim}
+      source-file: solution.py
+      compile-cmd: ""
+      run-cmd: "python3 solution.py"
+```
+
+Thêm ngôn ngữ mới: thêm entry vào `judge.languages`, không cần sửa code.
+
+## Import Problem từ ZIP
+
+Cấu trúc ZIP:
+
+```
+problem.yml          # bắt buộc
+tests/
+  1.in
+  1.out
+  2.in
+  2.out
+subtasks.yml         # tùy chọn
+checker.cpp          # tùy chọn (special judge)
+```
+
+`problem.yml`:
+```yaml
+slug: a-plus-b
+title: "A + B Problem"
+description: "Tính tổng hai số nguyên."
+timeLimitMs: 1000
+memoryLimitKb: 262144
+```
+
+`subtasks.yml`:
+```yaml
+- name: "Subtask 1"
+  score: 30
+  tests: ["1", "2"]
+- name: "Subtask 2"
+  score: 70
+  tests: ["3", "4", "5"]
+```
+
+Upload qua Admin Panel → Problems → **📦 Import ZIP**, hoặc API:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/admin/problems/import \
+  -H "X-API-Key: YOUR_ADMIN_KEY" \
+  -F "file=@problem.zip"
+```
+
+## Subtask Scoring
+
+Test case thuộc subtask: subtask chỉ được điểm khi **tất cả** test case trong subtask đều AC (all-or-nothing).  
+Test case không thuộc subtask nào: tính điểm riêng từng case.
+
+## Custom Checker (Special Judge)
+
+Checker nhận 3 đối số: `<input_file> <expected_file> <actual_file>`.  
+Exit code `0` = AC, khác = WA.
+
+```cpp
+// checker.cpp mẫu
+#include <bits/stdc++.h>
+using namespace std;
+int main(int argc, char* argv[]) {
+    ifstream expected(argv[2]), actual(argv[3]);
+    double a, b;
+    expected >> a; actual >> b;
+    return abs(a - b) < 1e-6 ? 0 : 1;
+}
+```
+
+Upload qua Admin Panel → Problems → nút **⚖️** → nhập source → Compile & Lưu.
+
 ## API nhanh
 
 Tất cả request cần header `X-API-Key`.
@@ -69,30 +162,41 @@ Tất cả request cần header `X-API-Key`.
 curl -X POST http://localhost:8080/api/v1/submissions/test \
   -H "X-API-Key: YOUR_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"problemId":1,"language":"cpp","sourceCode":"..."}'
+  -d '{"problemId":1,"language":"cpp","sourceCode":"#include<bits/stdc++.h>\nusing namespace std;\nint main(){int a,b;cin>>a>>b;cout<<a+b;}"}'
 
-# Nộp bài
+# Nộp bài (async)
 curl -X POST http://localhost:8080/api/v1/submissions \
   -H "X-API-Key: YOUR_KEY" \
   -H "Content-Type: application/json" \
   -d '{"problemId":1,"language":"cpp","sourceCode":"..."}'
+
+# Xem kết quả
+curl http://localhost:8080/api/v1/submissions/sub_xxxxxxxxxx \
+  -H "X-API-Key: YOUR_KEY"
 ```
 
-## Giao diện
+Verdicts: `AC` · `WA` · `TLE` · `MLE` · `RE` · `CE` · `SE` · `PENDING` · `JUDGING`
+
+## Giao diện Web
 
 | URL | Mô tả |
 |-----|-------|
+| `/admin.html` | Admin Panel (quản lý problem, checker, subtask, test case) |
+| `/solve.html` | Trang làm bài (Test Run + Submit) |
 | `/docs.html` | API Documentation |
-| `/solve.html` | Trang làm bài |
-| `/admin.html` | Admin Panel |
 
-## Cấu hình
+## Biến môi trường
 
-| Biến môi trường | Mô tả |
-|----------------|-------|
-| `DB_URL` | PostgreSQL JDBC URL |
-| `REDIS_HOST` | Redis hostname (mặc định `localhost`) |
-| `JUDGE_TESTCASE_BASE_PATH` | Thư mục lưu test case (mặc định `/data/problems`) |
+Xem đầy đủ trong `.env.example`. Các biến chính:
+
+| Biến | Mặc định | Mô tả |
+|------|----------|-------|
+| `DB_PASSWORD` | `change_me` | PostgreSQL password |
+| `JUDGE_WORKERS` | `4` | Số worker thread |
+| `JUDGE_TESTCASE_BASE_PATH` | `/data/problems` | Thư mục lưu test case |
+| `JUDGE_LANG_CPP_IMAGE` | `gcc:13` | Docker image cho C++ |
+| `JUDGE_LANG_JAVA_IMAGE` | `eclipse-temurin:21` | Docker image cho Java |
+| `JUDGE_LANG_PYTHON_IMAGE` | `python:3.12-slim` | Docker image cho Python |
 
 ## License
 
