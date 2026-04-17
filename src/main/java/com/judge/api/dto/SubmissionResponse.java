@@ -19,6 +19,7 @@ public class SubmissionResponse {
     private Integer memoryKb;
     private String errorMessage;
     private String language;
+    private String sourceCode;
     private boolean testRun;
     private LocalDateTime createdAt;
     private LocalDateTime finishedAt;
@@ -41,6 +42,7 @@ public class SubmissionResponse {
                 .memoryKb(s.getMemoryKb())
                 .errorMessage(s.getErrorMessage())
                 .language(s.getLanguage())
+                .sourceCode(s.getSourceCode())
                 .testRun(s.isTestRun())
                 .createdAt(s.getCreatedAt())
                 .finishedAt(s.getFinishedAt())

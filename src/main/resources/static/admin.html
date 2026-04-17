@@ -826,7 +826,10 @@ async function viewSubmission(id) {
           <tbody>${s.testResults.map(r => `
             <tr><td>TC-${r.testCaseId}</td><td>${verdictBadge(r.status)}</td><td>${r.timeMs ? r.timeMs+'ms' : '—'}</td></tr>
           `).join('')}</tbody>
-        </table></div>` : ''}`;
+        </table></div>` : ''}
+      ${s.sourceCode ? `
+        <div style="font-size:12px;font-weight:700;margin:16px 0 8px">Source Code</div>
+        <pre style="background:#0d0f1a;border:1px solid var(--border);border-radius:8px;padding:14px;font-size:12px;font-family:var(--mono);overflow-x:auto;white-space:pre;max-height:360px;overflow-y:auto;line-height:1.6">${escHtml(s.sourceCode)}</pre>` : ''}`;
     document.getElementById('sub-detail-content').innerHTML = html;
     openModal('modal-sub-detail');
   } catch(e) { toast('Lỗi: ' + e.message, 'error'); }
