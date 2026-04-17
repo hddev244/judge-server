@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Thêm ngôn ngữ mới — Judge Server</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0f1117;--surface:#1a1d27;--surface2:#222536;--border:#2e3148;
+  --accent:#6c63ff;--accent2:#00d4aa;--text:#e2e4f0;--muted:#8b8fa8;
+  --green:#22c55e;--yellow:#f59e0b;--red:#ef4444;--blue:#3b82f6;--purple:#a855f7;
+  --mono:'JetBrains Mono','Fira Code',monospace;
+}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);line-height:1.7}
+.layout{display:flex;min-height:100vh}
+
+/* Sidebar */
+.sidebar{width:250px;background:var(--surface);border-right:1px solid var(--border);padding:24px 0;position:sticky;top:0;height:100vh;overflow-y:auto;flex-shrink:0}
+.sidebar-logo{padding:0 20px 20px;border-bottom:1px solid var(--border);margin-bottom:12px}
+.logo-icon{width:36px;height:36px;background:linear-gradient(135deg,var(--accent),var(--accent2));border-radius:10px;display:inline-flex;align-items:center;justify-content:center;font-size:18px;margin-bottom:8px}
+.sidebar-logo h2{font-size:15px;font-weight:700}
+.sidebar-logo span{font-size:12px;color:var(--muted)}
+.sidebar-section{padding:0 12px;margin-bottom:6px}
+.sidebar-section-label{font-size:10px;font-weight:700;letter-spacing:1.2px;color:var(--muted);text-transform:uppercase;padding:8px 8px 4px}
+.sidebar a{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;color:var(--muted);text-decoration:none;font-size:13.5px;transition:all .15s}
+.sidebar a:hover{background:var(--surface2);color:var(--text)}
+.sidebar a.active{background:rgba(108,99,255,.15);color:var(--accent)}
+.dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+
+/* Main */
+.main{flex:1;max-width:900px;padding:48px 48px 80px}
+
+/* Section */
+.section{margin-bottom:52px}
+.section-title{font-size:20px;font-weight:700;margin-bottom:20px;padding-bottom:12px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
+.section-sub{font-size:15px;font-weight:700;margin:24px 0 12px;color:var(--text)}
+
+/* Code */
+pre,code{font-family:var(--mono);font-size:13px}
+.code-block{background:#0d0f1a;border:1px solid var(--border);border-radius:10px;overflow:hidden;margin:10px 0 16px}
+.code-header{display:flex;justify-content:space-between;align-items:center;padding:10px 16px;background:var(--surface2);border-bottom:1px solid var(--border);font-size:12px;color:var(--muted)}
+.copy-btn{cursor:pointer;padding:2px 10px;border-radius:5px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:11px;font-family:inherit;transition:all .15s}
+.copy-btn:hover{background:var(--surface);color:var(--text)}
+.code-block pre{padding:16px;overflow-x:auto;line-height:1.7}
+.k{color:#7c8cff}.s{color:#a5d6a7}.c{color:var(--muted)}.n{color:#80cbc4}.p{color:#ce93d8}.v{color:#ffcc80}.hl{background:rgba(108,99,255,.15);display:block;margin:0 -16px;padding:0 16px}
+
+/* Field explain */
+.field-grid{display:flex;flex-direction:column;gap:12px;margin:16px 0}
+.field-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 18px;display:flex;gap:16px}
+.field-key{font-family:var(--mono);font-size:13px;color:var(--accent2);font-weight:700;min-width:130px;flex-shrink:0;padding-top:2px}
+.field-body{}
+.field-body p{font-size:13.5px;color:var(--muted);margin-bottom:6px}
+.field-body .note{font-size:12px;background:var(--surface2);border-radius:6px;padding:5px 10px;display:inline-block;margin-top:4px}
+
+/* Lang cards */
+.lang-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px;margin-bottom:24px}
+.lang-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center;cursor:pointer;transition:all .15s;text-decoration:none;color:var(--muted);font-size:13px;font-weight:600}
+.lang-card:hover{border-color:var(--accent);color:var(--accent);background:rgba(108,99,255,.06)}
+.lang-card .lang-icon{font-size:24px;margin-bottom:6px}
+
+/* Alert */
+.alert{display:flex;gap:12px;align-items:flex-start;padding:14px 16px;border-radius:10px;margin:16px 0;font-size:13.5px}
+.alert.info{background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.3);color:#93c5fd}
+.alert.warn{background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);color:#fcd34d}
+.alert.tip{background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.25);color:#86efac}
+
+/* Table */
+table{width:100%;border-collapse:collapse;font-size:13.5px;margin:12px 0 16px}
+th{text-align:left;padding:10px 14px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);border-bottom:1px solid var(--border)}
+td{padding:10px 14px;border-bottom:1px solid var(--border);vertical-align:top}
+tr:last-child td{border-bottom:none}
+td code,p code,li code{background:var(--surface2);padding:2px 6px;border-radius:4px;font-size:12.5px;color:#80cbc4;font-family:var(--mono)}
+ul,ol{padding-left:20px}
+li{margin-bottom:6px;font-size:14px;color:var(--muted)}
+li strong{color:var(--text)}
+
+/* Steps */
+.steps{counter-reset:step}
+.step{display:flex;gap:16px;margin-bottom:20px}
+.step-num{counter-increment:step;width:28px;height:28px;flex-shrink:0;background:linear-gradient(135deg,var(--accent),var(--accent2));border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff}
+.step-num::before{content:counter(step)}
+.step-content{flex:1}
+.step-content h4{font-size:14px;font-weight:700;margin-bottom:6px}
+.step-content p{font-size:13.5px;color:var(--muted)}
+
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+@media(max-width:768px){.sidebar{display:none}.main{padding:24px 20px 60px}}
+</style>
+</head>
+<body>
+<div class="layout">
+
+<!-- Sidebar -->
+<nav class="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-icon">⚖️</div>
+    <h2>Judge Server</h2>
+    <span>Hướng dẫn ngôn ngữ</span>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-label">Nội dung</div>
+    <a href="#how-it-works"><span class="dot" style="background:#6c63ff"></span>Cơ chế hoạt động</a>
+    <a href="#fields"><span class="dot" style="background:#00d4aa"></span>Giải thích từng field</a>
+    <a href="#steps"><span class="dot" style="background:#f59e0b"></span>Các bước thêm ngôn ngữ</a>
+    <a href="#examples"><span class="dot" style="background:#22c55e"></span>Ví dụ sẵn có</a>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-label">Ví dụ theo ngôn ngữ</div>
+    <a href="#ex-go"><span class="dot" style="background:#00acd7"></span>Go</a>
+    <a href="#ex-rust"><span class="dot" style="background:#ce4a09"></span>Rust</a>
+    <a href="#ex-c"><span class="dot" style="background:#a8b9cc"></span>C</a>
+    <a href="#ex-node"><span class="dot" style="background:#68a063"></span>Node.js</a>
+    <a href="#ex-ruby"><span class="dot" style="background:#cc342d"></span>Ruby</a>
+    <a href="#ex-php"><span class="dot" style="background:#777bb3"></span>PHP</a>
+    <a href="#ex-kotlin"><span class="dot" style="background:#7f52ff"></span>Kotlin</a>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-label">Liên kết</div>
+    <a href="/docs.html"><span class="dot" style="background:#8b8fa8"></span>← Về API Docs</a>
+    <a href="/admin.html"><span class="dot" style="background:#8b8fa8"></span>Admin Panel</a>
+  </div>
+</nav>
+
+<!-- Main -->
+<main class="main">
+
+  <!-- Hero -->
+  <div style="margin-bottom:40px">
+    <div style="display:inline-flex;align-items:center;gap:6px;background:rgba(108,99,255,.2);color:var(--accent);font-size:12px;font-weight:600;padding:4px 12px;border-radius:20px;margin-bottom:16px">💻 Language Guide</div>
+    <h1 style="font-size:28px;font-weight:800;margin-bottom:10px">Thêm ngôn ngữ lập trình mới</h1>
+    <p style="color:var(--muted);font-size:15px;max-width:600px">Judge Server không hardcode ngôn ngữ. Mỗi ngôn ngữ chỉ là 4 dòng config trong <code>application.yml</code> — không cần sửa code Java, không cần build lại.</p>
+  </div>
+
+  <!-- How it works -->
+  <div class="section" id="how-it-works">
+    <div class="section-title"><span>⚙️</span>Cơ chế hoạt động</div>
+    <p style="color:var(--muted);font-size:14px;margin-bottom:16px">Hiểu flow này sẽ giúp bạn điền đúng config ngay lần đầu.</p>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num"></div>
+        <div class="step-content">
+          <h4>Server nhận code và tạo thư mục làm việc</h4>
+          <p>Source code được lưu vào file có tên <code>source-file</code> bên trong thư mục <code>/tmp/judge/&lt;job-id&gt;/</code> trên máy chủ.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num"></div>
+        <div class="step-content">
+          <h4>Compile (nếu có)</h4>
+          <p>Server chạy <code>compile-cmd</code> bên trong container Docker (image = <code>image</code>), mount thư mục làm việc vào <code>/code</code>. Nếu exit code ≠ 0 → <strong>CE (Compile Error)</strong>.</p>
+          <div class="code-block" style="margin-top:10px">
+            <div class="code-header"><span>Lệnh Docker thực sự chạy khi compile</span></div>
+            <pre>docker run --rm --network none \
+  -v /tmp/judge/abc123:/code \
+  -w /code \
+  <span class="v">&lt;image&gt;</span> /bin/sh -c <span class="s">"&lt;compile-cmd&gt;"</span></pre>
+          </div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num"></div>
+        <div class="step-content">
+          <h4>Chạy từng test case</h4>
+          <p>Với mỗi test case, server chạy <code>run-cmd</code> trong container (thư mục code mount read-only). Input được feed qua stdin. Output của chương trình đọc từ stdout.</p>
+          <div class="code-block" style="margin-top:10px">
+            <div class="code-header"><span>Lệnh Docker thực sự chạy khi run</span></div>
+            <pre>docker run --rm --network none \
+  --memory <span class="v">256m</span> --memory-swap <span class="v">256m</span> \
+  --cpus 0.5 --pids-limit 64 \
+  --read-only --tmpfs /tmp:size=64m \
+  -v /tmp/judge/abc123:/code:ro \
+  -v /data/problems/1/cases/1.in:/input.txt:ro \
+  -w /code \
+  <span class="v">&lt;image&gt;</span> /bin/sh -c <span class="s">"timeout 2 &lt;run-cmd&gt; &lt; /input.txt"</span></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="alert info">ℹ️ <strong>Working directory là <code>/code</code></strong>. Tất cả lệnh compile và run đều chạy từ đây. Source file nằm tại <code>/code/&lt;source-file&gt;</code>, binary sau compile cũng nằm ở <code>/code</code>.</div>
+  </div>
+
+  <!-- Fields -->
+  <div class="section" id="fields">
+    <div class="section-title"><span>📋</span>Giải thích từng field</div>
+    <p style="color:var(--muted);font-size:14px;margin-bottom:20px">Mỗi ngôn ngữ có 4 field trong <code>application.yml</code>:</p>
+
+    <div class="field-grid">
+      <div class="field-card">
+        <div class="field-key">image</div>
+        <div class="field-body">
+          <p><strong style="color:var(--text)">Docker image chứa compiler/runtime.</strong> Server pull image này từ Docker Hub để chạy code.</p>
+          <p>Dùng tag cụ thể (vd: <code>gcc:13</code>) thay vì <code>latest</code> để tránh thay đổi ngoài ý muốn.</p>
+          <div class="note">🔗 Tìm image tại <a href="https://hub.docker.com" target="_blank" style="color:var(--accent)">hub.docker.com</a> — search tên ngôn ngữ, chọn official image, ưu tiên tag <code>slim</code> hoặc <code>alpine</code> để nhẹ hơn.</div>
+        </div>
+      </div>
+
+      <div class="field-card">
+        <div class="field-key">source-file</div>
+        <div class="field-body">
+          <p><strong style="color:var(--text)">Tên file mà server dùng để lưu source code.</strong></p>
+          <p>Phải khớp với những gì compiler/runtime mong đợi. Ví dụ:</p>
+          <ul style="margin-top:4px">
+            <li><code>solution.go</code> — Go compiler đọc file <code>.go</code></li>
+            <li><code>Solution.java</code> — Java yêu cầu tên file = tên class (<code>Solution</code>)</li>
+            <li><code>solution.py</code> — Python không có yêu cầu đặc biệt, đặt tên gì cũng được</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="field-card">
+        <div class="field-key">compile-cmd</div>
+        <div class="field-body">
+          <p><strong style="color:var(--text)">Lệnh shell để compile source code.</strong> Chạy bên trong container tại <code>/code</code>.</p>
+          <p>Để <strong>trống (<code>""</code>)</strong> nếu ngôn ngữ không cần compile (Python, Ruby, PHP, Node.js...).</p>
+          <div class="note">⚠️ Lệnh phải tạo ra binary/bytecode cũng tại <code>/code</code>. Ví dụ Go: <code>go build -o solution solution.go</code> → tạo <code>/code/solution</code></div>
+        </div>
+      </div>
+
+      <div class="field-card">
+        <div class="field-key">run-cmd</div>
+        <div class="field-body">
+          <p><strong style="color:var(--text)">Lệnh shell để chạy chương trình.</strong> Stdin là input, stdout là output của bài.</p>
+          <p>Hỗ trợ placeholder <code>{mem}</code> — được thay bằng memory limit (MB) của problem trước khi chạy. Dùng cho JVM để set heap:</p>
+          <div class="code-block" style="margin-top:8px">
+            <div class="code-header"><span>Ví dụ dùng {mem} cho JVM</span></div>
+            <pre>run-cmd: <span class="s">"java -Xmx{mem}m -cp /code Solution"</span>
+<span class="c"># Nếu problem có memoryLimitKb=262144 (256MB),
+# lệnh thực tế sẽ là: java -Xmx256m -cp /code Solution</span></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Steps -->
+  <div class="section" id="steps">
+    <div class="section-title"><span>🚀</span>Các bước thêm ngôn ngữ</div>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num"></div>
+        <div class="step-content">
+          <h4>Pull Docker image về máy chủ</h4>
+          <p>Image cần có sẵn trên host mới chạy được. Chạy lệnh này trên máy chủ (hoặc thêm vào <code>scripts/init-images.sh</code>):</p>
+          <div class="code-block">
+            <div class="code-header"><span>bash</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+            <pre>sudo docker pull golang:1.22-alpine</pre>
+          </div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num"></div>
+        <div class="step-content">
+          <h4>Thêm config vào <code>application.yml</code></h4>
+          <div class="code-block">
+            <div class="code-header"><span>src/main/resources/application.yml</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+            <pre>judge:
+  languages:
+    cpp:      <span class="c"># ... giữ nguyên</span>
+    java:     <span class="c"># ... giữ nguyên</span>
+    python:   <span class="c"># ... giữ nguyên</span>
+<span class="hl">    go:
+      image: golang:1.22-alpine
+      source-file: solution.go
+      compile-cmd: "go build -o solution solution.go"
+      run-cmd: "./solution"</span></pre>
+          </div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num"></div>
+        <div class="step-content">
+          <h4>(Tùy chọn) Thêm biến môi trường vào <code>.env</code></h4>
+          <p>Nếu muốn đổi image linh hoạt mà không sửa file YAML:</p>
+          <div class="code-block">
+            <div class="code-header"><span>.env</span></div>
+            <pre>JUDGE_LANG_GO_IMAGE=golang:1.22-alpine</pre>
+          </div>
+          <div class="code-block">
+            <div class="code-header"><span>application.yml — dùng biến môi trường</span></div>
+            <pre>    go:
+      image: <span class="v">${JUDGE_LANG_GO_IMAGE:golang:1.22-alpine}</span>
+      source-file: solution.go
+      compile-cmd: <span class="s">"go build -o solution solution.go"</span>
+      run-cmd: <span class="s">"./solution"</span></pre>
+          </div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num"></div>
+        <div class="step-content">
+          <h4>Rebuild và restart server</h4>
+          <div class="code-block">
+            <div class="code-header"><span>bash</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+            <pre>docker compose build --no-cache judge-api
+docker compose up -d judge-api</pre>
+          </div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num"></div>
+        <div class="step-content">
+          <h4>Kiểm tra bằng cách nộp bài thử</h4>
+          <div class="code-block">
+            <div class="code-header"><span>bash — test run Hello World</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+            <pre>curl -X POST http://localhost:8080/api/v1/submissions/test \
+  -H <span class="s">"X-API-Key: YOUR_KEY"</span> \
+  -H <span class="s">"Content-Type: application/json"</span> \
+  -d <span class="s">'{"problemId":1,"language":"go","sourceCode":"package main\nimport \"fmt\"\nfunc main(){fmt.Scan(&a,&b);fmt.Println(a+b)}"}'</span></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="alert warn">⚠️ Nếu image chưa được pull → server sẽ tốn thêm thời gian pull lần đầu. Nên chạy <code>docker pull</code> trước khi khởi động.</div>
+  </div>
+
+  <!-- Examples -->
+  <div class="section" id="examples">
+    <div class="section-title"><span>📦</span>Config sẵn cho các ngôn ngữ phổ biến</div>
+
+    <div class="lang-grid">
+      <a href="#ex-go" class="lang-card"><div class="lang-icon">🐹</div>Go</a>
+      <a href="#ex-rust" class="lang-card"><div class="lang-icon">🦀</div>Rust</a>
+      <a href="#ex-c" class="lang-card"><div class="lang-icon">🔵</div>C</a>
+      <a href="#ex-node" class="lang-card"><div class="lang-icon">🟢</div>Node.js</a>
+      <a href="#ex-ruby" class="lang-card"><div class="lang-icon">💎</div>Ruby</a>
+      <a href="#ex-php" class="lang-card"><div class="lang-icon">🐘</div>PHP</a>
+      <a href="#ex-kotlin" class="lang-card"><div class="lang-icon">🟣</div>Kotlin</a>
+    </div>
+
+    <!-- Go -->
+    <div id="ex-go" style="margin-bottom:40px">
+      <div class="section-sub">🐹 Go (Golang)</div>
+      <table>
+        <tr><th>Field</th><th>Giá trị</th><th>Lý do</th></tr>
+        <tr><td><code>image</code></td><td><code>golang:1.22-alpine</code></td><td>Alpine nhỏ gọn, đủ dùng. <a href="https://hub.docker.com/_/golang" target="_blank" style="color:var(--accent)">Docker Hub ↗</a></td></tr>
+        <tr><td><code>source-file</code></td><td><code>solution.go</code></td><td>Go compiler đọc file <code>.go</code>, tên tự do</td></tr>
+        <tr><td><code>compile-cmd</code></td><td><code>go build -o solution solution.go</code></td><td>Build thành binary <code>solution</code></td></tr>
+        <tr><td><code>run-cmd</code></td><td><code>./solution</code></td><td>Chạy binary vừa build</td></tr>
+      </table>
+      <div class="code-block">
+        <div class="code-header"><span>application.yml</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre>    go:
+      image: <span class="s">golang:1.22-alpine</span>
+      source-file: <span class="s">solution.go</span>
+      compile-cmd: <span class="s">"go build -o solution solution.go"</span>
+      run-cmd: <span class="s">"./solution"</span></pre>
+      </div>
+      <div class="code-block">
+        <div class="code-header"><span>Mẫu code A+B — Go</span></div>
+        <pre><span class="k">package</span> main
+<span class="k">import</span> <span class="s">"fmt"</span>
+<span class="k">func</span> <span class="p">main</span>() {
+    <span class="k">var</span> a, b <span class="k">int</span>
+    fmt.Scan(&a, &b)
+    fmt.Println(a + b)
+}</pre>
+      </div>
+    </div>
+
+    <!-- Rust -->
+    <div id="ex-rust" style="margin-bottom:40px">
+      <div class="section-sub">🦀 Rust</div>
+      <table>
+        <tr><th>Field</th><th>Giá trị</th><th>Lý do</th></tr>
+        <tr><td><code>image</code></td><td><code>rust:1.77-slim</code></td><td><a href="https://hub.docker.com/_/rust" target="_blank" style="color:var(--accent)">Docker Hub ↗</a></td></tr>
+        <tr><td><code>source-file</code></td><td><code>solution.rs</code></td><td>Tên tự do với <code>rustc</code></td></tr>
+        <tr><td><code>compile-cmd</code></td><td><code>rustc -O -o solution solution.rs</code></td><td><code>-O</code> bật optimize</td></tr>
+        <tr><td><code>run-cmd</code></td><td><code>./solution</code></td><td>Chạy binary</td></tr>
+      </table>
+      <div class="code-block">
+        <div class="code-header"><span>application.yml</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre>    rust:
+      image: <span class="s">rust:1.77-slim</span>
+      source-file: <span class="s">solution.rs</span>
+      compile-cmd: <span class="s">"rustc -O -o solution solution.rs"</span>
+      run-cmd: <span class="s">"./solution"</span></pre>
+      </div>
+      <div class="alert warn" style="margin-top:4px">⚠️ Rust compile khá chậm (~5–15s). Nên tăng timeout compile hoặc dùng image <code>rust:slim</code> có sẵn cargo cache.</div>
+    </div>
+
+    <!-- C -->
+    <div id="ex-c" style="margin-bottom:40px">
+      <div class="section-sub">🔵 C (GCC)</div>
+      <table>
+        <tr><th>Field</th><th>Giá trị</th><th>Lý do</th></tr>
+        <tr><td><code>image</code></td><td><code>gcc:13</code></td><td>Cùng image với C++, không cần pull thêm. <a href="https://hub.docker.com/_/gcc" target="_blank" style="color:var(--accent)">Docker Hub ↗</a></td></tr>
+        <tr><td><code>source-file</code></td><td><code>solution.c</code></td><td>GCC nhận diện C qua đuôi <code>.c</code></td></tr>
+        <tr><td><code>compile-cmd</code></td><td><code>gcc -O2 -o solution solution.c -lm</code></td><td><code>-lm</code> link thư viện math</td></tr>
+        <tr><td><code>run-cmd</code></td><td><code>./solution</code></td><td></td></tr>
+      </table>
+      <div class="code-block">
+        <div class="code-header"><span>application.yml</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre>    c:
+      image: <span class="s">gcc:13</span>
+      source-file: <span class="s">solution.c</span>
+      compile-cmd: <span class="s">"gcc -O2 -o solution solution.c -lm"</span>
+      run-cmd: <span class="s">"./solution"</span></pre>
+      </div>
+    </div>
+
+    <!-- Node.js -->
+    <div id="ex-node" style="margin-bottom:40px">
+      <div class="section-sub">🟢 Node.js (JavaScript)</div>
+      <table>
+        <tr><th>Field</th><th>Giá trị</th><th>Lý do</th></tr>
+        <tr><td><code>image</code></td><td><code>node:20-alpine</code></td><td><a href="https://hub.docker.com/_/node" target="_blank" style="color:var(--accent)">Docker Hub ↗</a></td></tr>
+        <tr><td><code>source-file</code></td><td><code>solution.js</code></td><td></td></tr>
+        <tr><td><code>compile-cmd</code></td><td><code>""</code> (để trống)</td><td>JS không cần compile</td></tr>
+        <tr><td><code>run-cmd</code></td><td><code>node --max-old-space-size={mem} solution.js</code></td><td><code>{mem}</code> giới hạn heap Node.js theo memory limit</td></tr>
+      </table>
+      <div class="code-block">
+        <div class="code-header"><span>application.yml</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre>    nodejs:
+      image: <span class="s">node:20-alpine</span>
+      source-file: <span class="s">solution.js</span>
+      compile-cmd: <span class="s">""</span>
+      run-cmd: <span class="s">"node --max-old-space-size={mem} solution.js"</span></pre>
+      </div>
+      <div class="alert tip">💡 Tên key là <code>nodejs</code> (không phải <code>node</code>) để tránh nhầm. Khi submit dùng <code>"language": "nodejs"</code>.</div>
+    </div>
+
+    <!-- Ruby -->
+    <div id="ex-ruby" style="margin-bottom:40px">
+      <div class="section-sub">💎 Ruby</div>
+      <table>
+        <tr><th>Field</th><th>Giá trị</th><th>Lý do</th></tr>
+        <tr><td><code>image</code></td><td><code>ruby:3.3-alpine</code></td><td><a href="https://hub.docker.com/_/ruby" target="_blank" style="color:var(--accent)">Docker Hub ↗</a></td></tr>
+        <tr><td><code>source-file</code></td><td><code>solution.rb</code></td><td></td></tr>
+        <tr><td><code>compile-cmd</code></td><td><code>""</code></td><td>Ruby interpreted</td></tr>
+        <tr><td><code>run-cmd</code></td><td><code>ruby solution.rb</code></td><td></td></tr>
+      </table>
+      <div class="code-block">
+        <div class="code-header"><span>application.yml</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre>    ruby:
+      image: <span class="s">ruby:3.3-alpine</span>
+      source-file: <span class="s">solution.rb</span>
+      compile-cmd: <span class="s">""</span>
+      run-cmd: <span class="s">"ruby solution.rb"</span></pre>
+      </div>
+    </div>
+
+    <!-- PHP -->
+    <div id="ex-php" style="margin-bottom:40px">
+      <div class="section-sub">🐘 PHP</div>
+      <table>
+        <tr><th>Field</th><th>Giá trị</th><th>Lý do</th></tr>
+        <tr><td><code>image</code></td><td><code>php:8.3-cli-alpine</code></td><td>CLI variant, không cần apache/nginx. <a href="https://hub.docker.com/_/php" target="_blank" style="color:var(--accent)">Docker Hub ↗</a></td></tr>
+        <tr><td><code>source-file</code></td><td><code>solution.php</code></td><td></td></tr>
+        <tr><td><code>compile-cmd</code></td><td><code>""</code></td><td>PHP interpreted</td></tr>
+        <tr><td><code>run-cmd</code></td><td><code>php solution.php</code></td><td></td></tr>
+      </table>
+      <div class="code-block">
+        <div class="code-header"><span>application.yml</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre>    php:
+      image: <span class="s">php:8.3-cli-alpine</span>
+      source-file: <span class="s">solution.php</span>
+      compile-cmd: <span class="s">""</span>
+      run-cmd: <span class="s">"php solution.php"</span></pre>
+      </div>
+    </div>
+
+    <!-- Kotlin -->
+    <div id="ex-kotlin" style="margin-bottom:40px">
+      <div class="section-sub">🟣 Kotlin</div>
+      <table>
+        <tr><th>Field</th><th>Giá trị</th><th>Lý do</th></tr>
+        <tr><td><code>image</code></td><td><code>zenika/kotlin:2.0-jdk21</code></td><td>Image có sẵn kotlinc + JVM. <a href="https://hub.docker.com/r/zenika/kotlin" target="_blank" style="color:var(--accent)">Docker Hub ↗</a></td></tr>
+        <tr><td><code>source-file</code></td><td><code>solution.kt</code></td><td></td></tr>
+        <tr><td><code>compile-cmd</code></td><td><code>kotlinc solution.kt -include-runtime -d solution.jar</code></td><td>Build thành fat jar có runtime</td></tr>
+        <tr><td><code>run-cmd</code></td><td><code>java -Xmx{mem}m -jar /code/solution.jar</code></td><td>Chạy jar, dùng <code>{mem}</code></td></tr>
+      </table>
+      <div class="code-block">
+        <div class="code-header"><span>application.yml</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre>    kotlin:
+      image: <span class="s">zenika/kotlin:2.0-jdk21</span>
+      source-file: <span class="s">solution.kt</span>
+      compile-cmd: <span class="s">"kotlinc solution.kt -include-runtime -d solution.jar"</span>
+      run-cmd: <span class="s">"java -Xmx{mem}m -jar /code/solution.jar"</span></pre>
+      </div>
+      <div class="alert warn">⚠️ Kotlin compile rất chậm (~20–30s). Tăng compile timeout nếu cần.</div>
+    </div>
+
+    <!-- Quick reference -->
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px 24px">
+      <div style="font-size:14px;font-weight:700;margin-bottom:14px">Bảng tổng hợp nhanh</div>
+      <table>
+        <tr><th>Key</th><th>Image</th><th>compile-cmd</th><th>run-cmd</th></tr>
+        <tr><td><code>cpp</code></td><td><code>gcc:13</code></td><td><code>g++ -O2 -std=c++17 -o solution solution.cpp</code></td><td><code>./solution</code></td></tr>
+        <tr><td><code>c</code></td><td><code>gcc:13</code></td><td><code>gcc -O2 -o solution solution.c -lm</code></td><td><code>./solution</code></td></tr>
+        <tr><td><code>java</code></td><td><code>eclipse-temurin:21</code></td><td><code>javac -encoding UTF-8 Solution.java</code></td><td><code>java -Xmx{mem}m -cp /code Solution</code></td></tr>
+        <tr><td><code>python</code></td><td><code>python:3.12-slim</code></td><td>—</td><td><code>python3 solution.py</code></td></tr>
+        <tr><td><code>go</code></td><td><code>golang:1.22-alpine</code></td><td><code>go build -o solution solution.go</code></td><td><code>./solution</code></td></tr>
+        <tr><td><code>rust</code></td><td><code>rust:1.77-slim</code></td><td><code>rustc -O -o solution solution.rs</code></td><td><code>./solution</code></td></tr>
+        <tr><td><code>nodejs</code></td><td><code>node:20-alpine</code></td><td>—</td><td><code>node --max-old-space-size={mem} solution.js</code></td></tr>
+        <tr><td><code>ruby</code></td><td><code>ruby:3.3-alpine</code></td><td>—</td><td><code>ruby solution.rb</code></td></tr>
+        <tr><td><code>php</code></td><td><code>php:8.3-cli-alpine</code></td><td>—</td><td><code>php solution.php</code></td></tr>
+        <tr><td><code>kotlin</code></td><td><code>zenika/kotlin:2.0-jdk21</code></td><td><code>kotlinc solution.kt -include-runtime -d solution.jar</code></td><td><code>java -Xmx{mem}m -jar /code/solution.jar</code></td></tr>
+      </table>
+    </div>
+  </div>
+
+</main>
+</div>
+
+<script>
+function copyCode(btn) {
+  const pre = btn.closest('.code-block').querySelector('pre');
+  navigator.clipboard.writeText(pre.innerText).then(() => {
+    btn.textContent = 'Copied!';
+    setTimeout(() => btn.textContent = 'Copy', 1500);
+  });
+}
+const sections = document.querySelectorAll('[id]');
+const links = document.querySelectorAll('.sidebar a');
+window.addEventListener('scroll', () => {
+  let cur = '';
+  sections.forEach(s => { if (window.scrollY >= s.offsetTop - 80) cur = s.id; });
+  links.forEach(l => l.classList.toggle('active', l.getAttribute('href') === '#' + cur));
+});
+</script>
+</body>
+</html>
