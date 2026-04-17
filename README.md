@@ -89,44 +89,59 @@ Thêm ngôn ngữ mới: thêm entry vào `judge.languages`, không cần sửa 
 
 ## Import Problem từ ZIP
 
-Cấu trúc ZIP:
+Thay vì tạo problem rồi upload từng file, bạn có thể đóng gói toàn bộ vào một file `.zip` rồi import một lần.
+
+**Bước 1 — Tạo thư mục với cấu trúc sau:**
 
 ```
-problem.yml          # bắt buộc
-tests/
-  1.in
-  1.out
-  2.in
-  2.out
-subtasks.yml         # tùy chọn
-checker.cpp          # tùy chọn (special judge)
+my-problem/
+├── problem.yml        ← thông tin bài (bắt buộc)
+├── tests/
+│   ├── 1.in           ← input test 1
+│   ├── 1.out          ← output mong đợi của test 1
+│   ├── 2.in
+│   └── 2.out
+├── subtasks.yml       ← nhóm test theo subtask (không bắt buộc)
+└── checker.cpp        ← custom checker (không bắt buộc)
 ```
 
-`problem.yml`:
+> Tên file trong `tests/` tùy ý, miễn là `.in` và `.out` cùng tên gốc (vd: `sample1.in` / `sample1.out`).  
+> File có tên bắt đầu bằng `sample` hoặc `ex` sẽ tự động được đánh dấu là **test mẫu** (hiển thị trong đề bài).
+
+**Bước 2 — Viết `problem.yml`:**
+
 ```yaml
-slug: a-plus-b
+slug: a-plus-b          # ID duy nhất, dùng trong URL
 title: "A + B Problem"
-description: "Tính tổng hai số nguyên."
-timeLimitMs: 1000
-memoryLimitKb: 262144
+description: "Cho hai số nguyên a và b. In ra tổng a + b."
+timeLimitMs: 1000       # giới hạn thời gian (ms)
+memoryLimitKb: 262144   # giới hạn bộ nhớ (KB), 262144 = 256 MB
 ```
 
-`subtasks.yml`:
+**Bước 3 — (Tùy chọn) Viết `subtasks.yml` nếu bài có subtask:**
+
 ```yaml
-- name: "Subtask 1"
+- name: "Subtask 1 — a, b ≤ 100"
   score: 30
-  tests: ["1", "2"]
-- name: "Subtask 2"
+  tests: ["1", "2"]      # tên file (không kèm đuôi .in/.out)
+
+- name: "Subtask 2 — a, b ≤ 10^9"
   score: 70
   tests: ["3", "4", "5"]
 ```
 
-Upload qua Admin Panel → Problems → **📦 Import ZIP**, hoặc API:
+**Bước 4 — Nén thành ZIP và import:**
+
+```bash
+cd my-problem && zip -r ../my-problem.zip .
+```
+
+Sau đó vào **Admin Panel → Problems → 📦 Import ZIP** và chọn file, hoặc dùng API:
 
 ```bash
 curl -X POST http://localhost:8080/api/v1/admin/problems/import \
   -H "X-API-Key: YOUR_ADMIN_KEY" \
-  -F "file=@problem.zip"
+  -F "file=@my-problem.zip"
 ```
 
 ## Subtask Scoring
