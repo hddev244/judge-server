@@ -1,5 +1,6 @@
 package com.judge.queue;
 
+import com.judge.config.JudgeConfig;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -9,21 +10,22 @@ import java.util.Optional;
 @Service
 public class JudgeQueueService {
 
-    private static final String QUEUE_KEY = "judge:queue";
     private static final String PROCESSING_KEY = "judge:processing";
 
     private final StringRedisTemplate redis;
+    private final JudgeConfig judgeConfig;
 
-    public JudgeQueueService(StringRedisTemplate redis) {
+    public JudgeQueueService(StringRedisTemplate redis, JudgeConfig judgeConfig) {
         this.redis = redis;
+        this.judgeConfig = judgeConfig;
     }
 
     public void enqueue(String submissionId) {
-        redis.opsForList().leftPush(QUEUE_KEY, submissionId);
+        redis.opsForList().leftPush(judgeConfig.getQueueKey(), submissionId);
     }
 
     public Optional<String> dequeue() {
-        String result = redis.opsForList().rightPop(QUEUE_KEY, Duration.ofSeconds(2));
+        String result = redis.opsForList().rightPop(judgeConfig.getQueueKey(), Duration.ofSeconds(2));
         return Optional.ofNullable(result);
     }
 

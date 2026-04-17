@@ -10,7 +10,6 @@ public class SubmitRequest {
     private Long problemId;
 
     @NotBlank
-    @Pattern(regexp = "cpp|java|python", message = "language must be cpp, java, or python")
     private String language;
 
     @NotBlank

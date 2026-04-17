@@ -1,10 +1,9 @@
 package com.judge.api;
 
-import com.judge.api.dto.ProblemRequest;
-import com.judge.api.dto.ProblemResponse;
-import com.judge.api.dto.TestCaseResponse;
+import com.judge.api.dto.*;
 import com.judge.exception.JudgeException;
 import com.judge.security.ApiKeyContext;
+import com.judge.service.ProblemImportService;
 import com.judge.service.ProblemService;
 import jakarta.validation.Valid;
 import org.springframework.http.MediaType;
@@ -20,10 +19,15 @@ import java.util.List;
 public class AdminProblemController {
 
     private final ProblemService problemService;
+    private final ProblemImportService importService;
 
-    public AdminProblemController(ProblemService problemService) {
+    public AdminProblemController(ProblemService problemService,
+                                   ProblemImportService importService) {
         this.problemService = problemService;
+        this.importService = importService;
     }
+
+    // ─── Problem CRUD ───────────────────────────────────────────────────────
 
     @PostMapping
     public ResponseEntity<ProblemResponse> create(@RequestBody @Valid ProblemRequest req) {
@@ -44,16 +48,70 @@ public class AdminProblemController {
         return ResponseEntity.ok(problemService.publish(id));
     }
 
+    // ─── Import ─────────────────────────────────────────────────────────────
+
+    @PostMapping(value = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<ProblemResponse> importZip(
+            @RequestPart("file") MultipartFile file) throws IOException {
+        requireAdmin();
+        return ResponseEntity.status(201).body(importService.importZip(file.getInputStream()));
+    }
+
+    // ─── Checker ────────────────────────────────────────────────────────────
+
+    @PostMapping(value = "/{id}/checker", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<ProblemResponse> uploadChecker(
+            @PathVariable Long id,
+            @RequestParam String language,
+            @RequestPart("source") MultipartFile source) throws IOException {
+        requireAdmin();
+        return ResponseEntity.ok(
+                problemService.uploadChecker(id, language, new String(source.getBytes())));
+    }
+
+    @DeleteMapping("/{id}/checker")
+    public ResponseEntity<ProblemResponse> removeChecker(@PathVariable Long id) {
+        requireAdmin();
+        return ResponseEntity.ok(problemService.removeChecker(id));
+    }
+
+    // ─── Subtasks ────────────────────────────────────────────────────────────
+
+    @PostMapping("/{id}/subtasks")
+    public ResponseEntity<SubtaskResponse> addSubtask(
+            @PathVariable Long id,
+            @RequestBody @Valid SubtaskRequest req) {
+        requireAdmin();
+        return ResponseEntity.status(201).body(problemService.addSubtask(id, req));
+    }
+
+    @GetMapping("/{id}/subtasks")
+    public ResponseEntity<List<SubtaskResponse>> listSubtasks(@PathVariable Long id) {
+        requireAdmin();
+        return ResponseEntity.ok(problemService.listSubtasks(id));
+    }
+
+    @DeleteMapping("/{id}/subtasks/{subtaskId}")
+    public ResponseEntity<Void> deleteSubtask(@PathVariable Long id,
+                                               @PathVariable Long subtaskId) {
+        requireAdmin();
+        problemService.deleteSubtask(id, subtaskId);
+        return ResponseEntity.noContent().build();
+    }
+
+    // ─── Test Cases ──────────────────────────────────────────────────────────
+
     @PostMapping(value = "/{id}/test-cases", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<TestCaseResponse> addTestCase(
             @PathVariable Long id,
             @RequestPart("input") MultipartFile inputFile,
             @RequestPart("output") MultipartFile outputFile,
             @RequestParam(defaultValue = "false") boolean isSample,
-            @RequestParam(defaultValue = "1") int score) throws IOException {
+            @RequestParam(defaultValue = "1") int score,
+            @RequestParam(required = false) Long subtaskId) throws IOException {
         requireAdmin();
         return ResponseEntity.status(201).body(
-                problemService.addTestCase(id, inputFile, outputFile, isSample, score));
+                problemService.addTestCase(id, inputFile, outputFile, isSample, score, subtaskId));
     }
 
     @GetMapping("/{id}/test-cases")

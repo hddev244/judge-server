@@ -9,4 +9,5 @@ public interface ProblemRepository extends JpaRepository<Problem, Long> {
     Optional<Problem> findBySlugAndIsPublishedTrue(String slug);
     Optional<Problem> findBySlug(String slug);
     List<Problem> findByIsPublishedTrueOrderByIdAsc();
+    List<Problem> findAllByOrderByIdAsc();
 }

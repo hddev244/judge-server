@@ -2,16 +2,15 @@ services:
   judge-api:
     build: .
     ports:
-      - "8080:8080"
+      - "${SERVER_PORT:-8080}:8080"
+    env_file:
+      - .env
     environment:
       - SPRING_PROFILES_ACTIVE=docker
-      - DB_USER=judge
-      - DB_PASSWORD=judge
-      - JUDGE_TESTCASE_BASE_PATH=/data/problems
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:rw
-      - /tmp/judge:/tmp/judge
-      - /data/problems:/data/problems
+      - ${JUDGE_WORK_BASE:-/tmp/judge}:${JUDGE_WORK_BASE:-/tmp/judge}
+      - ${JUDGE_TESTCASE_BASE_PATH:-/data/problems}:${JUDGE_TESTCASE_BASE_PATH:-/data/problems}
     group_add:
       - "999"
     depends_on:
@@ -24,13 +23,13 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: judgedb
-      POSTGRES_USER: judge
-      POSTGRES_PASSWORD: judge
+      POSTGRES_DB: ${DB_NAME:-judgedb}
+      POSTGRES_USER: ${DB_USER:-judge}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-judge}
     volumes:
       - pg-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U judge -d judgedb"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-judge} -d ${DB_NAME:-judgedb}"]
       interval: 5s
       timeout: 5s
       retries: 10

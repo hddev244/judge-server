@@ -4,9 +4,9 @@ import jakarta.persistence.*;
 import lombok.*;
 
 @Entity
-@Table(name = "test_cases")
+@Table(name = "subtasks")
 @Getter @Setter @Builder @NoArgsConstructor @AllArgsConstructor
-public class TestCase {
+public class Subtask {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
@@ -14,18 +14,8 @@ public class TestCase {
     @JoinColumn(name = "problem_id", nullable = false)
     private Problem problem;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "subtask_id")
-    private Subtask subtask;
-
-    @Column(name = "input_path", nullable = false, length = 500)
-    private String inputPath;
-
-    @Column(name = "output_path", nullable = false, length = 500)
-    private String outputPath;
-
-    @Column(name = "is_sample", nullable = false)
-    private boolean isSample;
+    @Column(nullable = false, length = 100)
+    private String name;
 
     @Column(nullable = false)
     private int score;

@@ -1,12 +1,13 @@
 package com.judge.service;
 
-import com.judge.api.dto.ProblemRequest;
-import com.judge.api.dto.ProblemResponse;
-import com.judge.api.dto.TestCaseResponse;
+import com.judge.api.dto.*;
 import com.judge.domain.Problem;
+import com.judge.domain.Subtask;
 import com.judge.domain.TestCase;
 import com.judge.exception.JudgeException;
+import com.judge.judge.DockerRunner;
 import com.judge.repository.ProblemRepository;
+import com.judge.repository.SubtaskRepository;
 import com.judge.repository.TestCaseRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -22,13 +23,19 @@ public class ProblemService {
 
     private final ProblemRepository problemRepository;
     private final TestCaseRepository testCaseRepository;
+    private final SubtaskRepository subtaskRepository;
+    private final DockerRunner dockerRunner;
     private final String basePath;
 
     public ProblemService(ProblemRepository problemRepository,
                           TestCaseRepository testCaseRepository,
+                          SubtaskRepository subtaskRepository,
+                          DockerRunner dockerRunner,
                           @Value("${judge.testcase.base-path}") String basePath) {
         this.problemRepository = problemRepository;
         this.testCaseRepository = testCaseRepository;
+        this.subtaskRepository = subtaskRepository;
+        this.dockerRunner = dockerRunner;
         this.basePath = basePath;
     }
 
@@ -82,15 +89,62 @@ public class ProblemService {
         return ProblemResponse.from(problemRepository.save(problem));
     }
 
+    // ─── Subtask CRUD ──────────────────────────────────────────────────────────
+
+    @Transactional
+    public SubtaskResponse addSubtask(Long problemId, SubtaskRequest req) {
+        Problem problem = getOrThrow(problemId);
+        int orderIndex = req.getOrderIndex() > 0 ? req.getOrderIndex()
+                : subtaskRepository.findByProblemIdOrderByOrderIndexAsc(problemId).size();
+        Subtask subtask = Subtask.builder()
+                .problem(problem)
+                .name(req.getName())
+                .score(req.getScore())
+                .orderIndex(orderIndex)
+                .build();
+        return SubtaskResponse.from(subtaskRepository.save(subtask));
+    }
+
+    @Transactional(readOnly = true)
+    public List<SubtaskResponse> listSubtasks(Long problemId) {
+        getOrThrow(problemId);
+        return subtaskRepository.findByProblemIdOrderByOrderIndexAsc(problemId)
+                .stream().map(SubtaskResponse::from).toList();
+    }
+
+    @Transactional
+    public void deleteSubtask(Long problemId, Long subtaskId) {
+        getOrThrow(problemId);
+        Subtask subtask = subtaskRepository.findById(subtaskId)
+                .orElseThrow(() -> JudgeException.notFound("Subtask not found: " + subtaskId));
+        if (!subtask.getProblem().getId().equals(problemId)) {
+            throw JudgeException.forbidden("Subtask does not belong to this problem");
+        }
+        subtaskRepository.delete(subtask);
+    }
+
+    // ─── Test Case CRUD ────────────────────────────────────────────────────────
+
     @Transactional
     public TestCaseResponse addTestCase(Long problemId, MultipartFile inputFile,
-                                        MultipartFile outputFile, boolean isSample, int score) throws IOException {
+                                        MultipartFile outputFile, boolean isSample,
+                                        int score, Long subtaskId) throws IOException {
         Problem problem = getOrThrow(problemId);
+
+        Subtask subtask = null;
+        if (subtaskId != null) {
+            subtask = subtaskRepository.findById(subtaskId)
+                    .orElseThrow(() -> JudgeException.notFound("Subtask not found: " + subtaskId));
+            if (!subtask.getProblem().getId().equals(problemId)) {
+                throw JudgeException.forbidden("Subtask does not belong to this problem");
+            }
+        }
 
         int orderIndex = testCaseRepository.findByProblemIdOrderByOrderIndexAsc(problemId).size();
 
         TestCase tc = TestCase.builder()
                 .problem(problem)
+                .subtask(subtask)
                 .inputPath("")
                 .outputPath("")
                 .isSample(isSample)
@@ -132,6 +186,29 @@ public class ProblemService {
         tryDelete(tc.getInputPath());
         tryDelete(tc.getOutputPath());
         testCaseRepository.delete(tc);
+    }
+
+    // ─── Checker ───────────────────────────────────────────────────────────────
+
+    @Transactional
+    public ProblemResponse uploadChecker(Long problemId, String language, String sourceCode) throws IOException {
+        Problem problem = getOrThrow(problemId);
+        String binPath = dockerRunner.compileChecker(language, sourceCode, problemId);
+        problem.setCheckerType("CUSTOM");
+        problem.setCheckerLanguage(language);
+        problem.setCheckerSource(sourceCode);
+        problem.setCheckerBinPath(binPath);
+        return ProblemResponse.from(problemRepository.save(problem));
+    }
+
+    @Transactional
+    public ProblemResponse removeChecker(Long problemId) {
+        Problem problem = getOrThrow(problemId);
+        problem.setCheckerType("EXACT");
+        problem.setCheckerLanguage(null);
+        problem.setCheckerSource(null);
+        problem.setCheckerBinPath(null);
+        return ProblemResponse.from(problemRepository.save(problem));
     }
 
     private Problem getOrThrow(Long id) {

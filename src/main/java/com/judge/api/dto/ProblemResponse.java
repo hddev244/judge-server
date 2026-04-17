@@ -16,6 +16,9 @@ public class ProblemResponse {
     private int timeLimitMs;
     private int memoryLimitKb;
     private boolean isPublished;
+    private String checkerType;
+    private String checkerLanguage;
+    private boolean hasChecker;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -28,6 +31,9 @@ public class ProblemResponse {
                 .timeLimitMs(p.getTimeLimitMs())
                 .memoryLimitKb(p.getMemoryLimitKb())
                 .isPublished(p.isPublished())
+                .checkerType(p.getCheckerType())
+                .checkerLanguage(p.getCheckerLanguage())
+                .hasChecker(p.getCheckerBinPath() != null && !p.getCheckerBinPath().isBlank())
                 .createdAt(p.getCreatedAt())
                 .updatedAt(p.getUpdatedAt())
                 .build();

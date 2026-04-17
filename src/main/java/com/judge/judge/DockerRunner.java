@@ -1,5 +1,6 @@
 package com.judge.judge;
 
+import com.judge.config.JudgeConfig;
 import com.judge.judge.model.CompileResult;
 import com.judge.judge.model.RunResult;
 import org.slf4j.Logger;
@@ -8,8 +9,9 @@ import org.springframework.stereotype.Component;
 
 import java.io.*;
 import java.nio.file.*;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 @Component
@@ -17,35 +19,24 @@ public class DockerRunner {
 
     private static final Logger log = LoggerFactory.getLogger(DockerRunner.class);
 
-    private static final String WORK_BASE = "/tmp/judge";
+    private final JudgeConfig judgeConfig;
 
-    private static final Map<String, String> IMAGES = Map.of(
-            "cpp",    "gcc:13",
-            "java",   "eclipse-temurin:21",
-            "python", "python:3.12-slim"
-    );
-
-    private static final Map<String, String> SOURCE_FILES = Map.of(
-            "cpp",    "solution.cpp",
-            "java",   "Solution.java",
-            "python", "solution.py"
-    );
+    public DockerRunner(JudgeConfig judgeConfig) {
+        this.judgeConfig = judgeConfig;
+    }
 
     public CompileResult compile(String language, String sourceCode, String jobId) throws IOException {
-        Path workDir = Path.of(WORK_BASE, jobId);
+        JudgeConfig.LanguageConfig lang = getLanguageConfig(language);
+        Path workDir = Path.of(judgeConfig.getWorkBase(), jobId);
         Files.createDirectories(workDir);
 
-        String sourceFile = SOURCE_FILES.get(language);
-        Files.writeString(workDir.resolve(sourceFile), sourceCode);
+        Files.writeString(workDir.resolve(lang.getSourceFile()), sourceCode);
 
-        if ("python".equals(language)) {
-            return CompileResult.builder()
-                    .success(true)
-                    .workDir(workDir.toString())
-                    .build();
+        if (lang.getCompileCmd() == null || lang.getCompileCmd().isBlank()) {
+            return CompileResult.builder().success(true).workDir(workDir.toString()).build();
         }
 
-        List<String> cmd = buildCompileCommand(language, workDir.toString(), sourceFile);
+        List<String> cmd = buildDockerCmd(lang.getImage(), workDir.toString(), lang.getCompileCmd(), true);
         ProcessResult result = runProcess(cmd, 30_000);
 
         if (result.exitCode() != 0) {
@@ -56,20 +47,17 @@ public class DockerRunner {
                     .build();
         }
 
-        return CompileResult.builder()
-                .success(true)
-                .workDir(workDir.toString())
-                .build();
+        return CompileResult.builder().success(true).workDir(workDir.toString()).build();
     }
 
     public RunResult run(String workDir, String language, String inputPath,
                          int timeLimitMs, int memoryKb) {
+        JudgeConfig.LanguageConfig lang = getLanguageConfig(language);
         int memMb = Math.max(memoryKb / 1024, 64);
         int cpuSecs = Math.max(timeLimitMs / 1000 + 1, 2);
-        String image = IMAGES.get(language);
-        String runCmd = buildRunCommand(language, memMb);
+        String runCmd = lang.getRunCmd().replace("{mem}", String.valueOf(memMb));
 
-        List<String> cmd = List.of(
+        List<String> cmd = new ArrayList<>(List.of(
                 "docker", "run", "--rm",
                 "--network", "none",
                 "--memory", memMb + "m",
@@ -82,23 +70,18 @@ public class DockerRunner {
                 "-v", workDir + ":/code:ro",
                 "-v", inputPath + ":/input.txt:ro",
                 "-w", "/code",
-                image,
+                lang.getImage(),
                 "/bin/sh", "-c",
                 "timeout " + (timeLimitMs / 1000 + 1) + " " + runCmd + " < /input.txt"
-        );
+        ));
 
         long start = System.currentTimeMillis();
         try {
             ProcessResult result = runProcess(cmd, timeLimitMs + 3000L);
             long elapsed = System.currentTimeMillis() - start;
 
-            if (result.timedOut() || result.exitCode() == 124) {
-                return RunResult.tle(elapsed);
-            }
-            // OOM killed by Docker
-            if (result.exitCode() == 137) {
-                return RunResult.mle();
-            }
+            if (result.timedOut() || result.exitCode() == 124) return RunResult.tle(elapsed);
+            if (result.exitCode() == 137) return RunResult.mle();
 
             return RunResult.builder()
                     .stdout(result.stdout())
@@ -109,16 +92,80 @@ public class DockerRunner {
 
         } catch (IOException e) {
             log.error("Docker run failed for workDir={}", workDir, e);
-            return RunResult.builder()
-                    .exitCode(1)
-                    .stderr(e.getMessage())
-                    .stdout("")
-                    .build();
+            return RunResult.builder().exitCode(1).stderr(e.getMessage()).stdout("").build();
         }
     }
 
+    /**
+     * Compiles a custom checker. Returns the path to the checker binary, or throws on failure.
+     */
+    public String compileChecker(String language, String sourceCode, Long problemId) throws IOException {
+        JudgeConfig.LanguageConfig lang = getLanguageConfig(language);
+        Path checkerDir = Path.of(judgeConfig.getTestcaseBasePath(), String.valueOf(problemId), "checker");
+        Files.createDirectories(checkerDir);
+
+        Files.writeString(checkerDir.resolve(lang.getSourceFile()), sourceCode);
+
+        if (lang.getCompileCmd() != null && !lang.getCompileCmd().isBlank()) {
+            List<String> cmd = buildDockerCmd(lang.getImage(), checkerDir.toString(), lang.getCompileCmd(), true);
+            ProcessResult result = runProcess(cmd, 60_000);
+            if (result.exitCode() != 0) {
+                String err = result.stderr().isBlank() ? result.stdout() : result.stderr();
+                throw new IOException("Checker compilation failed: " + err);
+            }
+        }
+
+        // Return the directory; checker binary name depends on language
+        String binaryName = switch (language) {
+            case "cpp" -> "solution";
+            case "java" -> "checker_dir";
+            default -> "checker_dir";
+        };
+        return checkerDir.resolve(binaryName).toString();
+    }
+
+    /**
+     * Runs a custom checker. Returns "AC" if exit code 0, "WA" otherwise.
+     * Checker is called with: checker <input> <expected> <actual>
+     */
+    public String runChecker(String checkerBinPath, String inputPath, String expectedPath,
+                             String actualOutput, String workDir) throws IOException {
+        Path checkerDir = Path.of(checkerBinPath).getParent();
+        Path actualFile = Path.of(workDir, "actual.txt");
+        Files.writeString(actualFile, actualOutput);
+
+        // Determine language from checker directory
+        boolean isCpp = Files.exists(checkerDir.resolve("solution"));
+        String image = isCpp
+                ? judgeConfig.getLanguages().getOrDefault("cpp",
+                    new JudgeConfig.LanguageConfig()).getImage()
+                : judgeConfig.getLanguages().getOrDefault("java",
+                    new JudgeConfig.LanguageConfig()).getImage();
+        if (image == null) image = "gcc:13";
+
+        String checkerCmd = isCpp
+                ? "/checker/solution /input.txt /expected.txt /actual.txt"
+                : "java -cp /checker Checker /input.txt /expected.txt /actual.txt";
+
+        List<String> cmd = List.of(
+                "docker", "run", "--rm",
+                "--network", "none",
+                "--memory", "256m",
+                "--cpus", "0.5",
+                "-v", checkerDir.toString() + ":/checker:ro",
+                "-v", inputPath + ":/input.txt:ro",
+                "-v", expectedPath + ":/expected.txt:ro",
+                "-v", actualFile.toString() + ":/actual.txt:ro",
+                image,
+                "/bin/sh", "-c", checkerCmd
+        );
+
+        ProcessResult result = runProcess(cmd, 10_000);
+        return result.exitCode() == 0 ? "AC" : "WA";
+    }
+
     public void cleanup(String jobId) {
-        Path workDir = Path.of(WORK_BASE, jobId);
+        Path workDir = Path.of(judgeConfig.getWorkBase(), jobId);
         try {
             deleteRecursively(workDir);
         } catch (IOException e) {
@@ -126,36 +173,22 @@ public class DockerRunner {
         }
     }
 
-    private List<String> buildCompileCommand(String language, String workDir, String sourceFile) {
-        String image = IMAGES.get(language);
-        return switch (language) {
-            case "cpp" -> List.of(
-                    "docker", "run", "--rm",
-                    "--network", "none",
-                    "-v", workDir + ":/code",
-                    "-w", "/code",
-                    image,
-                    "g++", "-O2", "-o", "solution", sourceFile
-            );
-            case "java" -> List.of(
-                    "docker", "run", "--rm",
-                    "--network", "none",
-                    "-v", workDir + ":/code",
-                    "-w", "/code",
-                    image,
-                    "javac", "-encoding", "UTF-8", sourceFile
-            );
-            default -> throw new IllegalArgumentException("Unsupported language: " + language);
-        };
+    private JudgeConfig.LanguageConfig getLanguageConfig(String language) {
+        JudgeConfig.LanguageConfig lang = judgeConfig.getLanguages().get(language);
+        if (lang == null) throw new IllegalArgumentException("Unsupported language: " + language);
+        return lang;
     }
 
-    private String buildRunCommand(String language, int memMb) {
-        return switch (language) {
-            case "cpp"    -> "./solution";
-            case "java"   -> "java -cp /code -Xmx" + memMb + "m Solution";
-            case "python" -> "python3 solution.py";
-            default -> throw new IllegalArgumentException("Unsupported language: " + language);
-        };
+    private List<String> buildDockerCmd(String image, String workDir, String shellCmd, boolean rw) {
+        List<String> cmd = new ArrayList<>(List.of(
+                "docker", "run", "--rm",
+                "--network", "none",
+                "-v", workDir + ":/code" + (rw ? "" : ":ro"),
+                "-w", "/code",
+                image,
+                "/bin/sh", "-c", shellCmd
+        ));
+        return cmd;
     }
 
     private ProcessResult runProcess(List<String> cmd, long timeoutMs) throws IOException {
@@ -163,7 +196,6 @@ public class DockerRunner {
                 .redirectErrorStream(false)
                 .start();
 
-        // Read stdout and stderr concurrently to avoid blocking
         StringBuilder stdout = new StringBuilder();
         StringBuilder stderr = new StringBuilder();
 

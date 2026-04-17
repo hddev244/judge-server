@@ -11,6 +11,7 @@ public class TestCaseResponse {
     private boolean isSample;
     private int score;
     private int orderIndex;
+    private Long subtaskId;
 
     public static TestCaseResponse from(TestCase tc) {
         return TestCaseResponse.builder()
@@ -18,6 +19,7 @@ public class TestCaseResponse {
                 .isSample(tc.isSample())
                 .score(tc.getScore())
                 .orderIndex(tc.getOrderIndex())
+                .subtaskId(tc.getSubtask() != null ? tc.getSubtask().getId() : null)
                 .build();
     }
 }

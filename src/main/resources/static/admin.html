@@ -223,11 +223,14 @@ code{font-family:var(--mono);font-size:12px;background:var(--surface2);padding:2
   <div class="page" id="page-problems">
     <div class="page-header">
       <div><div class="page-title">Problems</div><div class="page-sub">Quản lý bài toán</div></div>
-      <button class="btn btn-primary" onclick="openModal('modal-problem')">+ Tạo problem</button>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-ghost" onclick="openModal('modal-import')">📦 Import ZIP</button>
+        <button class="btn btn-primary" onclick="openModal('modal-problem')">+ Tạo problem</button>
+      </div>
     </div>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>#</th><th>Slug</th><th>Title</th><th>Limits</th><th>Status</th><th>Test cases</th><th>Actions</th></tr></thead>
+        <thead><tr><th>#</th><th>Slug</th><th>Title</th><th>Limits</th><th>Status</th><th>Checker</th><th>Actions</th></tr></thead>
         <tbody id="problems-body"><tr><td colspan="7"><div class="empty"><p>Đang tải...</p></div></td></tr></tbody>
       </table>
     </div>
@@ -319,6 +322,7 @@ code{font-family:var(--mono);font-size:12px;background:var(--surface2);padding:2
       <div class="tc-tabs">
         <button class="tc-tab active" id="tab-btn-single" onclick="switchTcTab('single')">📄 Từng file</button>
         <button class="tc-tab" id="tab-btn-zip" onclick="switchTcTab('zip')">📦 Batch ZIP</button>
+        <button class="tc-tab" id="tab-btn-subtask" onclick="switchTcTab('subtask')">🏷 Subtasks</button>
       </div>
 
       <!-- Single file tab -->
@@ -363,6 +367,16 @@ code{font-family:var(--mono);font-size:12px;background:var(--surface2);padding:2
         <!-- Preview table rendered here -->
         <div id="zip-preview" style="margin-top:14px"></div>
 
+      <!-- Subtask tab -->
+      <div id="tc-tab-subtask" style="display:none">
+        <div id="subtask-list" style="margin-bottom:12px"></div>
+        <div style="display:flex;gap:10px;align-items:flex-end">
+          <div class="form-group" style="flex:1;margin-bottom:0"><label>Tên subtask</label><input id="st-name" placeholder="Subtask 1"/></div>
+          <div class="form-group" style="width:90px;margin-bottom:0"><label>Score</label><input id="st-score" type="number" value="10"/></div>
+          <button class="btn btn-primary btn-sm" onclick="addSubtask()" style="margin-bottom:1px">+ Thêm</button>
+        </div>
+      </div>
+
         <!-- Upload progress -->
         <div id="zip-progress" style="display:none;margin-top:12px">
           <div style="font-size:13px;color:var(--muted)" id="zip-progress-text">Uploading...</div>
@@ -401,6 +415,52 @@ code{font-family:var(--mono);font-size:12px;background:var(--surface2);padding:2
     <div id="sub-detail-content"></div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('modal-sub-detail')">Đóng</button>
+    </div>
+  </div>
+</div>
+
+<!-- Import ZIP Modal -->
+<div class="modal-backdrop" id="modal-import">
+  <div class="modal">
+    <h3>📦 Import Problem từ ZIP</h3>
+    <div class="alert alert-info" style="margin-bottom:14px;font-size:12px">
+      ZIP phải chứa: <code>problem.yml</code>, <code>tests/*.in</code> / <code>tests/*.out</code>.<br>
+      Tùy chọn: <code>subtasks.yml</code>, <code>checker.cpp</code>.
+    </div>
+    <div class="upload-zone" id="zone-import" onclick="document.getElementById('file-import').click()">
+      <p>📂 Click để chọn file .zip</p>
+      <div class="file-name" id="fname-import"></div>
+    </div>
+    <input type="file" id="file-import" hidden accept=".zip" onchange="showFile(this,'fname-import','zone-import')"/>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-import')">Hủy</button>
+      <button class="btn btn-primary" id="btn-do-import" onclick="doImport()">Import</button>
+    </div>
+  </div>
+</div>
+
+<!-- Checker Modal -->
+<div class="modal-backdrop" id="modal-checker">
+  <div class="modal" style="max-width:560px">
+    <h3>⚖️ Custom Checker — <span id="checker-problem-title"></span></h3>
+    <input type="hidden" id="checker-problem-id"/>
+    <div id="checker-current" style="margin-bottom:14px"></div>
+    <div class="form-group">
+      <label>Ngôn ngữ checker</label>
+      <select id="checker-lang">
+        <option value="cpp">C++ (gcc:13)</option>
+        <option value="java">Java</option>
+        <option value="python">Python</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Source code</label>
+      <textarea id="checker-source" style="min-height:160px;font-family:var(--mono);font-size:12px" placeholder="#include &lt;bits/stdc++.h&gt;&#10;// args: input expected actual&#10;// exit 0 = AC, else WA"></textarea>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-checker')">Hủy</button>
+      <button class="btn btn-danger btn-sm" id="btn-remove-checker" onclick="removeChecker()">Gỡ checker</button>
+      <button class="btn btn-primary" id="btn-upload-checker" onclick="uploadChecker()">Compile & Lưu</button>
     </div>
   </div>
 </div>
@@ -521,26 +581,28 @@ async function loadProblems(page = 0) {
   problemsPage = page;
   if (!apiKey) return;
   try {
-    const data = await api(`/api/v1/admin/problems?page=${page}&size=15`);
-    const rows = data.content?.map(p => `
+    const data = await api(`/api/v1/admin/problems?page=${page}&size=20`);
+    const list = data.content || [];
+    const rows = list.length ? list.map(p => `
       <tr>
         <td>${p.id}</td>
         <td><code>${p.slug}</code></td>
-        <td>${p.title}</td>
+        <td>${escHtml(p.title)}</td>
         <td style="font-size:12px;color:var(--muted)">${p.timeLimitMs}ms / ${p.memoryLimitKb}KB</td>
         <td>${p.published
           ? '<span class="badge badge-green">Published</span>'
           : '<span class="badge badge-gray">Draft</span>'}</td>
-        <td>
-          <button class="btn btn-ghost btn-sm" onclick="openTestCases(${p.id},'${p.title.replace(/'/g,"\\'")}')">
-            🧪 Test cases
-          </button>
-        </td>
-        <td style="display:flex;gap:6px">
+        <td>${p.checkerType === 'CUSTOM'
+          ? `<span class="badge badge-purple">Custom (${p.checkerLanguage||'?'})</span>`
+          : '<span class="badge badge-gray">Exact</span>'}</td>
+        <td style="display:flex;gap:5px;flex-wrap:wrap">
+          <button class="btn btn-ghost btn-sm" onclick="openTestCases(${p.id},'${p.title.replace(/'/g,"\\'")}')">🧪</button>
+          <button class="btn btn-ghost btn-sm" onclick="openChecker(${p.id},'${p.title.replace(/'/g,"\\'")}','${p.checkerType||'EXACT'}','${p.checkerLanguage||'cpp'}')">⚖️</button>
           <button class="btn btn-ghost btn-sm" onclick="openEdit(${p.id},'${p.slug}','${p.title.replace(/'/g,"\\'")}','${(p.description||'').replace(/'/g,"\\'").replace(/\n/g,'\\n')}',${p.timeLimitMs},${p.memoryLimitKb})">✏️</button>
           ${!p.published ? `<button class="btn btn-success btn-sm" onclick="publishProblem(${p.id})">Publish</button>` : ''}
         </td>
-      </tr>`).join('') || '<tr><td colspan="7"><div class="empty"><div class="empty-icon">📚</div><p>Chưa có problem nào</p></div></td></tr>';
+      </tr>`).join('')
+      : '<tr><td colspan="7"><div class="empty"><div class="empty-icon">📚</div><p>Chưa có problem nào</p></div></td></tr>';
     document.getElementById('problems-body').innerHTML = rows;
     renderPagination('problems-pagination', data, loadProblems);
   } catch(e) { toast('Lỗi tải problems: ' + e.message, 'error'); }
@@ -614,12 +676,12 @@ async function publishProblem(id) {
 let zipPairs = [];
 
 function switchTcTab(tab) {
-  const single = tab === 'single';
-  document.getElementById('tc-tab-single').style.display = single ? '' : 'none';
-  document.getElementById('tc-tab-zip').style.display = single ? 'none' : '';
-  document.getElementById('tab-btn-single').classList.toggle('active', single);
-  document.getElementById('tab-btn-zip').classList.toggle('active', !single);
-  document.getElementById('btn-upload-single').style.display = single ? '' : 'none';
+  ['single','zip','subtask'].forEach(t => {
+    document.getElementById('tc-tab-' + t).style.display = t === tab ? '' : 'none';
+    document.getElementById('tab-btn-' + t).classList.toggle('active', t === tab);
+  });
+  document.getElementById('btn-upload-single').style.display = tab === 'single' ? '' : 'none';
+  if (tab === 'subtask') refreshSubtaskList(document.getElementById('tc-problem-id').value);
 }
 
 async function openTestCases(problemId, title) {
@@ -971,6 +1033,113 @@ async function uploadZipBatch() {
   setTimeout(() => { prog.style.display = 'none'; }, 3000);
   resetZipTab();
   await refreshTestCaseList(pid);
+}
+
+// ─── Subtasks ────────────────────────────────────────────────────
+async function refreshSubtaskList(pid) {
+  try {
+    const list = await api(`/api/v1/admin/problems/${pid}/subtasks`);
+    document.getElementById('subtask-list').innerHTML = list.length
+      ? `<div class="table-wrap"><table>
+          <thead><tr><th>Order</th><th>Name</th><th>Score</th><th></th></tr></thead>
+          <tbody>${list.map(s => `
+            <tr>
+              <td>${s.orderIndex}</td>
+              <td>${escHtml(s.name)}</td>
+              <td>${s.score}</td>
+              <td><button class="btn btn-danger btn-sm" onclick="deleteSubtask(${pid},${s.id})">🗑</button></td>
+            </tr>`).join('')}
+          </tbody></table></div>`
+      : '<div class="alert alert-info" style="font-size:12px">Chưa có subtask nào. Subtask dùng để nhóm test case và áp dụng chấm tất-hoặc-không (all-or-nothing).</div>';
+  } catch(e) {}
+}
+
+async function addSubtask() {
+  const pid = document.getElementById('tc-problem-id').value;
+  const name = document.getElementById('st-name').value.trim();
+  const score = +document.getElementById('st-score').value;
+  if (!name) { toast('Nhập tên subtask', 'error'); return; }
+  try {
+    await api(`/api/v1/admin/problems/${pid}/subtasks`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ name, score })
+    });
+    document.getElementById('st-name').value = '';
+    document.getElementById('st-score').value = 10;
+    await refreshSubtaskList(pid);
+    toast('Thêm subtask thành công!', 'success');
+  } catch(e) { toast('Lỗi: ' + e.message, 'error'); }
+}
+
+async function deleteSubtask(pid, sid) {
+  if (!confirm('Xóa subtask này? Các test case thuộc subtask sẽ không còn subtask.')) return;
+  try {
+    await api(`/api/v1/admin/problems/${pid}/subtasks/${sid}`, { method: 'DELETE' });
+    toast('Đã xóa subtask', 'success');
+    await refreshSubtaskList(pid);
+  } catch(e) { toast('Lỗi: ' + e.message, 'error'); }
+}
+
+// ─── Checker ─────────────────────────────────────────────────────
+function openChecker(id, title, checkerType, checkerLang) {
+  document.getElementById('checker-problem-id').value = id;
+  document.getElementById('checker-problem-title').textContent = title;
+  document.getElementById('checker-lang').value = checkerLang || 'cpp';
+  document.getElementById('checker-source').value = '';
+  document.getElementById('checker-current').innerHTML = checkerType === 'CUSTOM'
+    ? `<div class="badge badge-purple" style="margin-bottom:4px">Custom checker (${checkerLang})</div>`
+    : '<div class="badge badge-gray">EXACT match (mặc định)</div>';
+  openModal('modal-checker');
+}
+
+async function uploadChecker() {
+  const pid = document.getElementById('checker-problem-id').value;
+  const lang = document.getElementById('checker-lang').value;
+  const src = document.getElementById('checker-source').value.trim();
+  if (!src) { toast('Nhập source code checker', 'error'); return; }
+  const btn = document.getElementById('btn-upload-checker');
+  btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Compiling...';
+  try {
+    const fd = new FormData();
+    fd.append('language', lang);
+    fd.append('source', new Blob([src], {type:'text/plain'}), 'checker.cpp');
+    await api(`/api/v1/admin/problems/${pid}/checker`, { method: 'POST', body: fd });
+    toast('Compile & lưu checker thành công!', 'success');
+    closeModal('modal-checker');
+    loadProblems(problemsPage);
+  } catch(e) { toast('Lỗi: ' + e.message, 'error'); }
+  finally { btn.disabled = false; btn.textContent = 'Compile & Lưu'; }
+}
+
+async function removeChecker() {
+  const pid = document.getElementById('checker-problem-id').value;
+  if (!confirm('Xóa custom checker và chuyển về EXACT match?')) return;
+  try {
+    await api(`/api/v1/admin/problems/${pid}/checker`, { method: 'DELETE' });
+    toast('Đã gỡ checker', 'success');
+    closeModal('modal-checker');
+    loadProblems(problemsPage);
+  } catch(e) { toast('Lỗi: ' + e.message, 'error'); }
+}
+
+// ─── Import ZIP ──────────────────────────────────────────────────
+async function doImport() {
+  const file = document.getElementById('file-import').files[0];
+  if (!file) { toast('Chọn file ZIP', 'error'); return; }
+  const btn = document.getElementById('btn-do-import');
+  btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Importing...';
+  try {
+    const fd = new FormData();
+    fd.append('file', file);
+    const p = await api('/api/v1/admin/problems/import', { method: 'POST', body: fd });
+    toast(`Import thành công: ${p.slug}!`, 'success');
+    closeModal('modal-import');
+    document.getElementById('file-import').value = '';
+    document.getElementById('fname-import').textContent = '';
+    document.getElementById('zone-import').classList.remove('has-file');
+    loadProblems(0);
+  } catch(e) { toast('Lỗi: ' + e.message, 'error'); }
+  finally { btn.disabled = false; btn.textContent = 'Import'; }
 }
 
 // ─── Boot ────────────────────────────────────────────────────────

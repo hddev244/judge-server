@@ -7,14 +7,9 @@ import java.util.List;
 
 @Entity
 @Table(name = "problems")
-@Getter
-@Setter
-@Builder
-@NoArgsConstructor
-@AllArgsConstructor
+@Getter @Setter @Builder @NoArgsConstructor @AllArgsConstructor
 public class Problem {
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     @Column(nullable = false, unique = true, length = 100)
@@ -35,6 +30,20 @@ public class Problem {
     @Column(name = "is_published", nullable = false)
     private boolean isPublished;
 
+    /** EXACT (default) or CUSTOM */
+    @Column(name = "checker_type", nullable = false, length = 20)
+    @Builder.Default
+    private String checkerType = "EXACT";
+
+    @Column(name = "checker_language", length = 10)
+    private String checkerLanguage;
+
+    @Column(name = "checker_source", columnDefinition = "TEXT")
+    private String checkerSource;
+
+    @Column(name = "checker_bin_path", length = 500)
+    private String checkerBinPath;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -46,12 +55,8 @@ public class Problem {
     private List<TestCase> testCases;
 
     @PrePersist
-    void prePersist() {
-        createdAt = updatedAt = LocalDateTime.now();
-    }
+    void prePersist() { createdAt = updatedAt = LocalDateTime.now(); }
 
     @PreUpdate
-    void preUpdate() {
-        updatedAt = LocalDateTime.now();
-    }
+    void preUpdate() { updatedAt = LocalDateTime.now(); }
 }
