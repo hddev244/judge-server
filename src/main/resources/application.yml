@@ -1,0 +1,56 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: judge-server
+
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/judgedb}
+    username: ${DB_USER:judge}
+    password: ${DB_PASSWORD:judge}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: false
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: 6379
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+judge:
+  testcase:
+    base-path: ${JUDGE_TESTCASE_BASE_PATH:/data/problems}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: when-authorized
+
+---
+spring:
+  config:
+    activate:
+      on-profile: docker
+
+  datasource:
+    url: jdbc:postgresql://postgres:5432/judgedb
+
+  data:
+    redis:
+      host: redis

@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Judge Admin</title>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0f1117;--surface:#1a1d27;--surface2:#222536;--border:#2e3148;
+  --accent:#6c63ff;--accent2:#00d4aa;--text:#e2e4f0;--muted:#8b8fa8;
+  --green:#22c55e;--yellow:#f59e0b;--red:#ef4444;--blue:#3b82f6;--purple:#a855f7;
+  --mono:'JetBrains Mono','Fira Code',monospace;
+}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);line-height:1.6}
+a{color:inherit;text-decoration:none}
+button{font-family:inherit;cursor:pointer}
+
+/* Layout */
+.layout{display:flex;height:100vh;overflow:hidden}
+.sidebar{width:220px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0}
+.main{flex:1;overflow-y:auto;background:var(--bg)}
+
+/* Sidebar */
+.sidebar-head{padding:18px 16px;border-bottom:1px solid var(--border)}
+.sidebar-head .brand{display:flex;align-items:center;gap:10px}
+.sidebar-head .icon{width:32px;height:32px;background:linear-gradient(135deg,var(--accent),var(--accent2));border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:16px}
+.sidebar-head h1{font-size:14px;font-weight:700}
+.sidebar-head span{font-size:11px;color:var(--muted)}
+.sidebar-key{margin:12px;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px}
+.sidebar-key label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;display:block;margin-bottom:4px}
+.sidebar-key input{width:100%;background:transparent;border:none;outline:none;color:var(--text);font-size:12px;font-family:var(--mono)}
+.nav{flex:1;padding:8px}
+.nav-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;font-size:13.5px;color:var(--muted);cursor:pointer;transition:all .15s;margin-bottom:2px}
+.nav-item:hover{background:var(--surface2);color:var(--text)}
+.nav-item.active{background:rgba(108,99,255,.15);color:var(--accent)}
+.nav-item .ni{font-size:16px;width:20px;text-align:center}
+.sidebar-foot{padding:12px 16px;border-top:1px solid var(--border);font-size:12px;color:var(--muted)}
+
+/* Page */
+.page{display:none;padding:28px 32px 60px}
+.page.active{display:block}
+.page-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px}
+.page-title{font-size:20px;font-weight:700}
+.page-sub{font-size:13px;color:var(--muted);margin-top:2px}
+
+/* Stats */
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:14px;margin-bottom:28px}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 18px}
+.stat-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px}
+.stat-value{font-size:28px;font-weight:800}
+.stat-value.green{color:var(--green)}
+.stat-value.blue{color:var(--blue)}
+.stat-value.purple{color:var(--purple)}
+.stat-value.yellow{color:var(--yellow)}
+
+/* Buttons */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:8px;font-size:13px;font-weight:600;border:none;transition:all .15s}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-primary:hover{background:#7c73ff}
+.btn-ghost{background:transparent;color:var(--muted);border:1px solid var(--border)}
+.btn-ghost:hover{background:var(--surface2);color:var(--text)}
+.btn-danger{background:rgba(239,68,68,.15);color:var(--red);border:1px solid rgba(239,68,68,.3)}
+.btn-danger:hover{background:rgba(239,68,68,.25)}
+.btn-success{background:rgba(34,197,94,.15);color:var(--green);border:1px solid rgba(34,197,94,.3)}
+.btn-success:hover{background:rgba(34,197,94,.25)}
+.btn-sm{padding:4px 10px;font-size:12px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+
+/* Table */
+.table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th{padding:10px 16px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);border-bottom:1px solid var(--border);background:var(--surface2);text-align:left}
+td{padding:11px 16px;border-bottom:1px solid var(--border);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:rgba(255,255,255,.02)}
+
+/* Badges */
+.badge{display:inline-flex;align-items:center;font-size:11px;font-weight:700;padding:2px 8px;border-radius:5px}
+.badge-green{background:rgba(34,197,94,.15);color:var(--green)}
+.badge-red{background:rgba(239,68,68,.15);color:var(--red)}
+.badge-blue{background:rgba(59,130,246,.15);color:var(--blue)}
+.badge-yellow{background:rgba(245,158,11,.15);color:var(--yellow)}
+.badge-purple{background:rgba(168,85,247,.15);color:var(--purple)}
+.badge-gray{background:rgba(139,143,168,.15);color:var(--muted)}
+.badge-ac{background:rgba(34,197,94,.15);color:var(--green)}
+.badge-wa{background:rgba(239,68,68,.15);color:var(--red)}
+.badge-tle,.badge-mle{background:rgba(245,158,11,.15);color:var(--yellow)}
+.badge-ce{background:rgba(168,85,247,.15);color:var(--purple)}
+.badge-re{background:rgba(239,68,68,.15);color:var(--red)}
+.badge-se,.badge-pending,.badge-judging{background:rgba(139,143,168,.15);color:var(--muted)}
+
+/* Modal */
+.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100;display:none;align-items:center;justify-content:center}
+.modal-backdrop.open{display:flex}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:24px 28px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto}
+.modal h3{font-size:16px;font-weight:700;margin-bottom:20px}
+.modal-footer{display:flex;justify-content:flex-end;gap:10px;margin-top:20px}
+
+/* Form */
+.form-group{margin-bottom:16px}
+.form-group label{display:block;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px}
+.form-group input,.form-group select,.form-group textarea{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13.5px;font-family:inherit;outline:none;transition:border .15s}
+.form-group input:focus,.form-group select:focus,.form-group textarea:focus{border-color:var(--accent)}
+.form-group textarea{min-height:80px;resize:vertical}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.form-check{display:flex;align-items:center;gap:8px;font-size:13.5px;cursor:pointer}
+.form-check input{width:auto;accent-color:var(--accent)}
+
+/* Upload zone */
+.upload-zone{border:2px dashed var(--border);border-radius:10px;padding:20px;text-align:center;cursor:pointer;transition:all .15s;background:var(--surface2)}
+.upload-zone:hover{border-color:var(--accent);background:rgba(108,99,255,.05)}
+.upload-zone.has-file{border-color:var(--green);background:rgba(34,197,94,.05)}
+.upload-zone p{font-size:13px;color:var(--muted)}
+.upload-zone .file-name{color:var(--green);font-size:12px;font-family:var(--mono);margin-top:4px}
+
+/* Code */
+code{font-family:var(--mono);font-size:12px;background:var(--surface2);padding:2px 6px;border-radius:4px;color:#80cbc4}
+
+/* Pagination */
+.pagination{display:flex;align-items:center;gap:8px;margin-top:16px;justify-content:flex-end}
+.pagination button{padding:5px 11px;border-radius:7px;border:1px solid var(--border);background:var(--surface);color:var(--muted);font-size:13px;font-family:inherit}
+.pagination button:hover:not(:disabled){background:var(--surface2);color:var(--text)}
+.pagination button.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.pagination span{font-size:13px;color:var(--muted)}
+
+/* Toast */
+#toast{position:fixed;bottom:24px;right:24px;z-index:999;display:flex;flex-direction:column;gap:8px}
+.toast-item{padding:10px 16px;border-radius:10px;font-size:13.5px;font-weight:600;animation:slideIn .2s ease}
+.toast-item.success{background:#166534;color:#86efac;border:1px solid #16a34a}
+.toast-item.error{background:#7f1d1d;color:#fca5a5;border:1px solid #dc2626}
+.toast-item.info{background:#1e3a5f;color:#93c5fd;border:1px solid #2563eb}
+@keyframes slideIn{from{transform:translateX(80px);opacity:0}to{transform:none;opacity:1}}
+
+/* Empty state */
+.empty{text-align:center;padding:48px 24px;color:var(--muted)}
+.empty .empty-icon{font-size:40px;margin-bottom:12px}
+.empty p{font-size:14px}
+
+/* Alert */
+.alert{padding:12px 16px;border-radius:9px;font-size:13.5px;margin-bottom:16px}
+.alert-info{background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.3);color:#93c5fd}
+
+/* Spinner */
+.spin{display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Key display */
+.key-new{background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);border-radius:10px;padding:14px 16px;margin-bottom:4px}
+.key-new label{font-size:11px;color:var(--green);display:block;margin-bottom:6px;font-weight:700}
+.key-new .key-val{font-family:var(--mono);font-size:13px;color:var(--text);word-break:break-all}
+.key-new .copy-key{float:right;margin-left:8px}
+
+/* TC Tabs */
+.tc-tabs{display:flex;gap:4px;background:var(--surface2);border-radius:9px;padding:4px;margin-bottom:14px}
+.tc-tab{flex:1;padding:7px;border-radius:7px;border:none;background:transparent;color:var(--muted);font-size:13px;font-weight:600;font-family:inherit;cursor:pointer;transition:all .15s;text-align:center}
+.tc-tab.active{background:var(--surface);color:var(--text);box-shadow:0 1px 4px rgba(0,0,0,.35)}
+.tc-tab:hover:not(.active){color:var(--text)}
+
+/* ZIP preview */
+.zip-prev-panel{display:grid;grid-template-columns:1fr 1fr;background:var(--bg)}
+.zip-pre{margin:0;font-size:11px;font-family:var(--mono);white-space:pre-wrap;word-break:break-all;max-height:150px;overflow-y:auto;line-height:1.5}
+.zip-pre.inp{color:#80cbc4}
+.zip-pre.out{color:#86efac}
+
+/* Upload progress */
+.progress-wrap{background:var(--surface2);border-radius:4px;height:6px;overflow:hidden;margin-top:6px}
+.progress-bar{height:100%;background:var(--accent);transition:width .25s}
+</style>
+</head>
+<body>
+<div class="layout">
+
+<!-- Sidebar -->
+<aside class="sidebar">
+  <div class="sidebar-head">
+    <div class="brand">
+      <div class="icon">⚖️</div>
+      <div><h1>Judge Admin</h1><span id="sidebar-user">Chưa đăng nhập</span></div>
+    </div>
+  </div>
+  <div class="sidebar-key">
+    <label>API Key</label>
+    <input id="api-key-input" type="password" placeholder="sk_..." autocomplete="off"/>
+  </div>
+  <nav class="nav">
+    <div class="nav-item active" data-page="dashboard"><span class="ni">📊</span>Dashboard</div>
+    <div class="nav-item" data-page="problems"><span class="ni">📚</span>Problems</div>
+    <div class="nav-item" data-page="submissions"><span class="ni">📤</span>Submissions</div>
+    <div class="nav-item" data-page="apikeys"><span class="ni">🔑</span>API Keys</div>
+  </nav>
+  <div class="sidebar-foot">Judge Server v1 · <a href="/docs.html" target="_blank" style="color:var(--accent)">Docs</a></div>
+</aside>
+
+<!-- Main -->
+<main class="main">
+
+  <!-- Dashboard -->
+  <div class="page active" id="page-dashboard">
+    <div class="page-header">
+      <div><div class="page-title">Dashboard</div><div class="page-sub">Tổng quan hệ thống</div></div>
+      <button class="btn btn-ghost" onclick="loadDashboard()">↻ Refresh</button>
+    </div>
+    <div class="stats-grid" id="stats-grid">
+      <div class="stat-card"><div class="stat-label">Total Problems</div><div class="stat-value blue" id="s-problems">—</div></div>
+      <div class="stat-card"><div class="stat-label">Published</div><div class="stat-value green" id="s-published">—</div></div>
+      <div class="stat-card"><div class="stat-label">Submissions</div><div class="stat-value purple" id="s-submissions">—</div></div>
+      <div class="stat-card"><div class="stat-label">API Keys</div><div class="stat-value yellow" id="s-keys">—</div></div>
+    </div>
+    <div class="page-header" style="margin-bottom:12px">
+      <div class="page-title" style="font-size:16px">Submissions gần đây</div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>ID</th><th>Problem</th><th>Language</th><th>Status</th><th>Score</th><th>Time</th><th>Submitted</th></tr></thead>
+        <tbody id="recent-subs"><tr><td colspan="7" class="empty"><p>Đang tải...</p></td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Problems -->
+  <div class="page" id="page-problems">
+    <div class="page-header">
+      <div><div class="page-title">Problems</div><div class="page-sub">Quản lý bài toán</div></div>
+      <button class="btn btn-primary" onclick="openModal('modal-problem')">+ Tạo problem</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>#</th><th>Slug</th><th>Title</th><th>Limits</th><th>Status</th><th>Test cases</th><th>Actions</th></tr></thead>
+        <tbody id="problems-body"><tr><td colspan="7"><div class="empty"><p>Đang tải...</p></div></td></tr></tbody>
+      </table>
+    </div>
+    <div class="pagination" id="problems-pagination"></div>
+  </div>
+
+  <!-- Submissions -->
+  <div class="page" id="page-submissions">
+    <div class="page-header">
+      <div><div class="page-title">Submissions</div><div class="page-sub">Lịch sử chấm bài</div></div>
+      <button class="btn btn-ghost" onclick="loadSubmissions(0)">↻ Refresh</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>ID</th><th>Problem</th><th>Language</th><th>Status</th><th>Score</th><th>Time (ms)</th><th>Submitted</th><th>Detail</th></tr></thead>
+        <tbody id="subs-body"><tr><td colspan="8"><div class="empty"><p>Đang tải...</p></div></td></tr></tbody>
+      </table>
+    </div>
+    <div class="pagination" id="subs-pagination"></div>
+  </div>
+
+  <!-- API Keys -->
+  <div class="page" id="page-apikeys">
+    <div class="page-header">
+      <div><div class="page-title">API Keys</div><div class="page-sub">Quản lý quyền truy cập</div></div>
+      <button class="btn btn-primary" onclick="openModal('modal-apikey')">+ Tạo API Key</button>
+    </div>
+    <div id="new-key-display"></div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>ID</th><th>Client</th><th>Key</th><th>Rate limit</th><th>Admin</th><th>Status</th><th>Created</th><th>Actions</th></tr></thead>
+        <tbody id="keys-body"><tr><td colspan="8"><div class="empty"><p>Đang tải...</p></div></td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+</main>
+</div>
+
+<!-- ── Modals ── -->
+
+<!-- Create Problem -->
+<div class="modal-backdrop" id="modal-problem">
+  <div class="modal">
+    <h3>📚 Tạo Problem mới</h3>
+    <div class="form-group"><label>Slug <span style="color:var(--red)">*</span></label><input id="p-slug" placeholder="a-plus-b"/></div>
+    <div class="form-group"><label>Title <span style="color:var(--red)">*</span></label><input id="p-title" placeholder="A + B Problem"/></div>
+    <div class="form-group"><label>Description</label><textarea id="p-desc" placeholder="Mô tả bài toán..."></textarea></div>
+    <div class="form-row">
+      <div class="form-group"><label>Time limit (ms)</label><input id="p-time" type="number" value="2000"/></div>
+      <div class="form-group"><label>Memory limit (KB)</label><input id="p-mem" type="number" value="262144"/></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-problem')">Hủy</button>
+      <button class="btn btn-primary" id="btn-create-problem" onclick="createProblem()">Tạo</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Problem -->
+<div class="modal-backdrop" id="modal-edit-problem">
+  <div class="modal">
+    <h3>✏️ Chỉnh sửa Problem</h3>
+    <input type="hidden" id="ep-id"/>
+    <input type="hidden" id="ep-slug"/>
+    <div class="form-group"><label>Title</label><input id="ep-title"/></div>
+    <div class="form-group"><label>Description</label><textarea id="ep-desc"></textarea></div>
+    <div class="form-row">
+      <div class="form-group"><label>Time limit (ms)</label><input id="ep-time" type="number"/></div>
+      <div class="form-group"><label>Memory limit (KB)</label><input id="ep-mem" type="number"/></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-edit-problem')">Hủy</button>
+      <button class="btn btn-primary" onclick="updateProblem()">Lưu</button>
+    </div>
+  </div>
+</div>
+
+<!-- Test Cases -->
+<div class="modal-backdrop" id="modal-testcases">
+  <div class="modal" style="max-width:700px">
+    <h3>🧪 Test Cases — <span id="tc-problem-title"></span></h3>
+    <input type="hidden" id="tc-problem-id"/>
+    <div id="tc-list" style="margin-bottom:16px"></div>
+    <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:4px">
+      <div style="font-size:13px;font-weight:700;margin-bottom:12px">Thêm test cases</div>
+
+      <!-- Tab switcher -->
+      <div class="tc-tabs">
+        <button class="tc-tab active" id="tab-btn-single" onclick="switchTcTab('single')">📄 Từng file</button>
+        <button class="tc-tab" id="tab-btn-zip" onclick="switchTcTab('zip')">📦 Batch ZIP</button>
+      </div>
+
+      <!-- Single file tab -->
+      <div id="tc-tab-single">
+        <div class="form-row">
+          <div>
+            <div style="font-size:11px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.8px">Input file</div>
+            <div class="upload-zone" id="zone-in" onclick="document.getElementById('file-in').click()">
+              <p>📂 Click để chọn .in</p>
+              <div class="file-name" id="fname-in"></div>
+            </div>
+            <input type="file" id="file-in" hidden accept=".in,.txt" onchange="showFile(this,'fname-in','zone-in')"/>
+          </div>
+          <div>
+            <div style="font-size:11px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.8px">Output file</div>
+            <div class="upload-zone" id="zone-out" onclick="document.getElementById('file-out').click()">
+              <p>📂 Click để chọn .out</p>
+              <div class="file-name" id="fname-out"></div>
+            </div>
+            <input type="file" id="file-out" hidden accept=".out,.txt" onchange="showFile(this,'fname-out','zone-out')"/>
+          </div>
+        </div>
+        <div class="form-row" style="margin-top:12px">
+          <div class="form-group"><label>Score</label><input id="tc-score" type="number" value="1"/></div>
+          <div class="form-group" style="display:flex;align-items:flex-end;padding-bottom:2px">
+            <label class="form-check"><input type="checkbox" id="tc-sample"/> Sample (hiển thị public)</label>
+          </div>
+        </div>
+      </div>
+
+      <!-- ZIP tab -->
+      <div id="tc-tab-zip" style="display:none">
+        <div class="alert alert-info" style="margin-bottom:12px;font-size:12px">
+          ZIP chứa các cặp <code>1.in</code>/<code>1.out</code>, <code>2.in</code>/<code>2.out</code>, … (tên tùy ý, cùng basename là được). Hỗ trợ thư mục con.
+        </div>
+        <div class="upload-zone" id="zone-zip" onclick="document.getElementById('file-zip').click()">
+          <p>📦 Click hoặc kéo thả file .zip vào đây</p>
+          <div class="file-name" id="fname-zip"></div>
+        </div>
+        <input type="file" id="file-zip" hidden accept=".zip" onchange="parseZipFile(this)"/>
+
+        <!-- Preview table rendered here -->
+        <div id="zip-preview" style="margin-top:14px"></div>
+
+        <!-- Upload progress -->
+        <div id="zip-progress" style="display:none;margin-top:12px">
+          <div style="font-size:13px;color:var(--muted)" id="zip-progress-text">Uploading...</div>
+          <div class="progress-wrap"><div class="progress-bar" id="zip-progress-bar" style="width:0%"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-testcases')">Đóng</button>
+      <button class="btn btn-primary" id="btn-upload-single" onclick="uploadTestCase()">Upload</button>
+    </div>
+  </div>
+</div>
+
+<!-- Create API Key -->
+<div class="modal-backdrop" id="modal-apikey">
+  <div class="modal">
+    <h3>🔑 Tạo API Key</h3>
+    <div class="form-group"><label>Tên client <span style="color:var(--red)">*</span></label><input id="k-name" placeholder="my-app"/></div>
+    <div class="form-group"><label>Rate limit (requests/giờ)</label><input id="k-rate" type="number" value="100"/></div>
+    <div class="form-group">
+      <label class="form-check"><input type="checkbox" id="k-admin"/> Quyền Admin (tạo/sửa problems)</label>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-apikey')">Hủy</button>
+      <button class="btn btn-primary" onclick="createApiKey()">Tạo key</button>
+    </div>
+  </div>
+</div>
+
+<!-- Submission detail -->
+<div class="modal-backdrop" id="modal-sub-detail">
+  <div class="modal" style="max-width:620px">
+    <h3>📋 Chi tiết submission</h3>
+    <div id="sub-detail-content"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-sub-detail')">Đóng</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const BASE = window.location.origin;
+let apiKey = localStorage.getItem('judge_admin_key') || '';
+let problemsPage = 0, subsPage = 0;
+
+// ─── Init ───────────────────────────────────────────────────────
+const keyInput = document.getElementById('api-key-input');
+keyInput.value = apiKey;
+keyInput.addEventListener('change', () => {
+  apiKey = keyInput.value.trim();
+  localStorage.setItem('judge_admin_key', apiKey);
+  loadCurrentPage();
+});
+
+document.querySelectorAll('.nav-item').forEach(el => {
+  el.addEventListener('click', () => {
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    el.classList.add('active');
+    document.getElementById('page-' + el.dataset.page).classList.add('active');
+    loadCurrentPage();
+  });
+});
+
+function loadCurrentPage() {
+  const active = document.querySelector('.nav-item.active')?.dataset.page;
+  if (active === 'dashboard')   loadDashboard();
+  if (active === 'problems')    loadProblems(0);
+  if (active === 'submissions') loadSubmissions(0);
+  if (active === 'apikeys')     loadApiKeys();
+}
+
+// ─── API helper ─────────────────────────────────────────────────
+async function api(path, opts = {}) {
+  const res = await fetch(BASE + path, {
+    ...opts,
+    headers: { 'X-API-Key': apiKey, ...(opts.headers || {}) }
+  });
+  if (res.status === 204) return null;
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.message || 'HTTP ' + res.status);
+  return data;
+}
+
+// ─── Toast ──────────────────────────────────────────────────────
+function toast(msg, type = 'info') {
+  const el = document.createElement('div');
+  el.className = 'toast-item ' + type;
+  el.textContent = msg;
+  document.getElementById('toast').appendChild(el);
+  setTimeout(() => el.remove(), 3500);
+}
+
+// ─── Modal ──────────────────────────────────────────────────────
+function openModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+document.querySelectorAll('.modal-backdrop').forEach(m => {
+  m.addEventListener('click', e => { if (e.target === m) m.classList.remove('open'); });
+});
+
+// ─── Helpers ────────────────────────────────────────────────────
+function fmtDate(s) {
+  if (!s) return '—';
+  return new Date(s).toLocaleString('vi-VN', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+}
+function verdictBadge(v) {
+  if (!v) return '<span class="badge badge-gray">—</span>';
+  const cls = { AC:'ac',WA:'wa',TLE:'tle',MLE:'mle',CE:'ce',RE:'re',SE:'se',PENDING:'pending',JUDGING:'judging' }[v] || 'gray';
+  return `<span class="badge badge-${cls}">${v}</span>`;
+}
+function langBadge(l) {
+  const map = {cpp:'blue',java:'yellow',python:'green'};
+  return `<span class="badge badge-${map[l]||'gray'}">${l||'—'}</span>`;
+}
+function showFile(input, fnameId, zoneId) {
+  const f = input.files[0];
+  document.getElementById(fnameId).textContent = f ? f.name : '';
+  document.getElementById(zoneId).classList.toggle('has-file', !!f);
+}
+
+// ─── Dashboard ──────────────────────────────────────────────────
+async function loadDashboard() {
+  if (!apiKey) return;
+  try {
+    const stats = await api('/api/v1/admin/stats');
+    document.getElementById('s-problems').textContent = stats.totalProblems;
+    document.getElementById('s-published').textContent = stats.publishedProblems;
+    document.getElementById('s-submissions').textContent = stats.totalSubmissions;
+    document.getElementById('s-keys').textContent = stats.activeApiKeys + ' / ' + stats.totalApiKeys;
+
+    const subs = await api('/api/v1/admin/submissions?size=10');
+    const rows = subs.content?.map(s => `
+      <tr>
+        <td><code>${s.submissionId}</code></td>
+        <td>${s.language ? '' : '—'}</td>
+        <td>${langBadge(s.language)}</td>
+        <td>${verdictBadge(s.status)}</td>
+        <td>${s.score ?? '—'}</td>
+        <td>${s.timeMs ? s.timeMs + ' ms' : '—'}</td>
+        <td>${fmtDate(s.createdAt)}</td>
+      </tr>`).join('') || '<tr><td colspan="7"><div class="empty"><div class="empty-icon">📭</div><p>Chưa có submission</p></div></td></tr>';
+    document.getElementById('recent-subs').innerHTML = rows;
+
+    const whoami = await api('/api/v1/admin/api-keys');
+    const me = whoami.find(k => k.key === apiKey);
+    document.getElementById('sidebar-user').textContent = me ? me.clientName : 'Admin';
+  } catch(e) { toast('Lỗi: ' + e.message, 'error'); }
+}
+
+// ─── Problems ───────────────────────────────────────────────────
+async function loadProblems(page = 0) {
+  problemsPage = page;
+  if (!apiKey) return;
+  try {
+    const data = await api(`/api/v1/admin/problems?page=${page}&size=15`);
+    const rows = data.content?.map(p => `
+      <tr>
+        <td>${p.id}</td>
+        <td><code>${p.slug}</code></td>
+        <td>${p.title}</td>
+        <td style="font-size:12px;color:var(--muted)">${p.timeLimitMs}ms / ${p.memoryLimitKb}KB</td>
+        <td>${p.published
+          ? '<span class="badge badge-green">Published</span>'
+          : '<span class="badge badge-gray">Draft</span>'}</td>
+        <td>
+          <button class="btn btn-ghost btn-sm" onclick="openTestCases(${p.id},'${p.title.replace(/'/g,"\\'")}')">
+            🧪 Test cases
+          </button>
+        </td>
+        <td style="display:flex;gap:6px">
+          <button class="btn btn-ghost btn-sm" onclick="openEdit(${p.id},'${p.slug}','${p.title.replace(/'/g,"\\'")}','${(p.description||'').replace(/'/g,"\\'").replace(/\n/g,'\\n')}',${p.timeLimitMs},${p.memoryLimitKb})">✏️</button>
+          ${!p.published ? `<button class="btn btn-success btn-sm" onclick="publishProblem(${p.id})">Publish</button>` : ''}
+        </td>
+      </tr>`).join('') || '<tr><td colspan="7"><div class="empty"><div class="empty-icon">📚</div><p>Chưa có problem nào</p></div></td></tr>';
+    document.getElementById('problems-body').innerHTML = rows;
+    renderPagination('problems-pagination', data, loadProblems);
+  } catch(e) { toast('Lỗi tải problems: ' + e.message, 'error'); }
+}
+
+async function createProblem() {
+  const btn = document.getElementById('btn-create-problem');
+  btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Đang tạo...';
+  try {
+    await api('/api/v1/admin/problems', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        slug: document.getElementById('p-slug').value.trim(),
+        title: document.getElementById('p-title').value.trim(),
+        description: document.getElementById('p-desc').value.trim(),
+        timeLimitMs: +document.getElementById('p-time').value,
+        memoryLimitKb: +document.getElementById('p-mem').value
+      })
+    });
+    closeModal('modal-problem');
+    toast('Tạo problem thành công!', 'success');
+    loadProblems(0);
+    ['p-slug','p-title','p-desc'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('p-time').value = 2000;
+    document.getElementById('p-mem').value = 262144;
+  } catch(e) { toast('Lỗi: ' + e.message, 'error'); }
+  finally { btn.disabled = false; btn.textContent = 'Tạo'; }
+}
+
+function openEdit(id, slug, title, desc, time, mem) {
+  document.getElementById('ep-id').value = id;
+  document.getElementById('ep-slug').value = slug;
+  document.getElementById('ep-title').value = title;
+  document.getElementById('ep-desc').value = desc.replace(/\\n/g,'\n');
+  document.getElementById('ep-time').value = time;
+  document.getElementById('ep-mem').value = mem;
+  openModal('modal-edit-problem');
+}
+
+async function updateProblem() {
+  const id = document.getElementById('ep-id').value;
+  try {
+    await api(`/api/v1/admin/problems/${id}`, {
+      method: 'PUT',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        slug: document.getElementById('ep-slug').value,
+        title: document.getElementById('ep-title').value.trim(),
+        description: document.getElementById('ep-desc').value.trim(),
+        timeLimitMs: +document.getElementById('ep-time').value,
+        memoryLimitKb: +document.getElementById('ep-mem').value
+      })
+    });
+    closeModal('modal-edit-problem');
+    toast('Cập nhật thành công!', 'success');
+    loadProblems(problemsPage);
+  } catch(e) { toast('Lỗi: ' + e.message, 'error'); }
+}
+
+async function publishProblem(id) {
+  if (!confirm('Publish problem này? Sau khi publish, người dùng có thể submit.')) return;
+  try {
+    await api(`/api/v1/admin/problems/${id}/publish`, { method: 'POST' });
+    toast('Published!', 'success');
+    loadProblems(problemsPage);
+  } catch(e) { toast('Lỗi: ' + e.message, 'error'); }
+}
+
+// ─── Test Cases ──────────────────────────────────────────────────
+let zipPairs = [];
+
+function switchTcTab(tab) {
+  const single = tab === 'single';
+  document.getElementById('tc-tab-single').style.display = single ? '' : 'none';
+  document.getElementById('tc-tab-zip').style.display = single ? 'none' : '';
+  document.getElementById('tab-btn-single').classList.toggle('active', single);
+  document.getElementById('tab-btn-zip').classList.toggle('active', !single);
+  document.getElementById('btn-upload-single').style.display = single ? '' : 'none';
+}
+
+async function openTestCases(problemId, title) {
+  document.getElementById('tc-problem-id').value = problemId;
+  document.getElementById('tc-problem-title').textContent = title;
+  document.getElementById('file-in').value = '';
+  document.getElementById('file-out').value = '';
+  document.getElementById('fname-in').textContent = '';
+  document.getElementById('fname-out').textContent = '';
+  document.getElementById('zone-in').classList.remove('has-file');
+  document.getElementById('zone-out').classList.remove('has-file');
+  resetZipTab();
+  switchTcTab('single');
+  openModal('modal-testcases');
+  await refreshTestCaseList(problemId);
+}
+
+function resetZipTab() {
+  zipPairs = [];
+  document.getElementById('file-zip').value = '';
+  document.getElementById('fname-zip').textContent = '';
+  document.getElementById('zone-zip').classList.remove('has-file');
+  document.getElementById('zip-preview').innerHTML = '';
+  document.getElementById('zip-progress').style.display = 'none';
+}
+
+async function refreshTestCaseList(problemId) {
+  try {
+    const list = await api(`/api/v1/admin/problems/${problemId}/test-cases`);
+    const html = list.length === 0
+      ? '<div class="alert alert-info">Chưa có test case nào.</div>'
+      : `<div class="table-wrap"><table>
+          <thead><tr><th>#</th><th>Score</th><th>Sample</th><th></th></tr></thead>
+          <tbody>${list.map(tc => `
+            <tr>
+              <td><code>TC-${tc.id}</code></td>
+              <td>${tc.score}</td>
+              <td>${tc.sample ? '✅' : '—'}</td>
+              <td><button class="btn btn-danger btn-sm" onclick="deleteTestCase(${problemId},${tc.id})">🗑 Xóa</button></td>
+            </tr>`).join('')}
+          </tbody></table></div>`;
+    document.getElementById('tc-list').innerHTML = html;
+  } catch(e) { document.getElementById('tc-list').innerHTML = '<div class="alert alert-info">Không tải được test cases.</div>'; }
+}
+
+async function uploadTestCase() {
+  const pid = document.getElementById('tc-problem-id').value;
+  const inFile = document.getElementById('file-in').files[0];
+  const outFile = document.getElementById('file-out').files[0];
+  if (!inFile || !outFile) { toast('Chọn cả input và output file', 'error'); return; }
+
+  const fd = new FormData();
+  fd.append('input', inFile);
+  fd.append('output', outFile);
+  fd.append('score', document.getElementById('tc-score').value);
+  fd.append('isSample', document.getElementById('tc-sample').checked);
+
+  try {
+    await api(`/api/v1/admin/problems/${pid}/test-cases`, { method: 'POST', body: fd });
+    toast('Upload thành công!', 'success');
+    document.getElementById('file-in').value = '';
+    document.getElementById('file-out').value = '';
+    document.getElementById('fname-in').textContent = '';
+    document.getElementById('fname-out').textContent = '';
+    document.getElementById('zone-in').classList.remove('has-file');
+    document.getElementById('zone-out').classList.remove('has-file');
+    await refreshTestCaseList(pid);
+  } catch(e) { toast('Upload thất bại: ' + e.message, 'error'); }
+}
+
+async function deleteTestCase(pid, cid) {
+  if (!confirm(`Xóa test case TC-${cid}?`)) return;
+  try {
+    await api(`/api/v1/admin/problems/${pid}/test-cases/${cid}`, { method: 'DELETE' });
+    toast('Đã xóa', 'success');
+    await refreshTestCaseList(pid);
+  } catch(e) { toast('Lỗi: ' + e.message, 'error'); }
+}
+
+// ─── Submissions ─────────────────────────────────────────────────
+async function loadSubmissions(page = 0) {
+  subsPage = page;
+  if (!apiKey) return;
+  try {
+    const data = await api(`/api/v1/admin/submissions?page=${page}&size=20`);
+    const rows = data.content?.map(s => `
+      <tr>
+        <td><code style="font-size:11px">${s.submissionId}</code></td>
+        <td>—</td>
+        <td>${langBadge(s.language)}</td>
+        <td>${verdictBadge(s.status)}</td>
+        <td>${s.score ?? '—'}</td>
+        <td>${s.timeMs ? s.timeMs + ' ms' : '—'}</td>
+        <td>${fmtDate(s.createdAt)}</td>
+        <td><button class="btn btn-ghost btn-sm" onclick="viewSubmission('${s.submissionId}')">Detail</button></td>
+      </tr>`).join('') || '<tr><td colspan="8"><div class="empty"><div class="empty-icon">📭</div><p>Chưa có submission nào</p></div></td></tr>';
+    document.getElementById('subs-body').innerHTML = rows;
+    renderPagination('subs-pagination', data, loadSubmissions);
+  } catch(e) { toast('Lỗi: ' + e.message, 'error'); }
+}
+
+async function viewSubmission(id) {
+  try {
+    const s = await api(`/api/v1/submissions/${id}`);
+    const html = `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+        <div><div style="font-size:11px;color:var(--muted);margin-bottom:4px">ID</div><code>${s.submissionId}</code></div>
+        <div><div style="font-size:11px;color:var(--muted);margin-bottom:4px">Status</div>${verdictBadge(s.status)}</div>
+        <div><div style="font-size:11px;color:var(--muted);margin-bottom:4px">Language</div>${langBadge(s.language)}</div>
+        <div><div style="font-size:11px;color:var(--muted);margin-bottom:4px">Score</div><strong>${s.score ?? '—'}</strong></div>
+        <div><div style="font-size:11px;color:var(--muted);margin-bottom:4px">Time</div>${s.timeMs ? s.timeMs + ' ms' : '—'}</div>
+        <div><div style="font-size:11px;color:var(--muted);margin-bottom:4px">Created</div>${fmtDate(s.createdAt)}</div>
+      </div>
+      ${s.errorMessage ? `<div class="alert" style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:#fca5a5;font-family:var(--mono);font-size:12px;white-space:pre-wrap">${s.errorMessage}</div>` : ''}
+      ${s.testResults?.length ? `
+        <div style="font-size:12px;font-weight:700;margin-bottom:8px">Test Results (${s.testResults.length})</div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Test Case</th><th>Status</th><th>Time</th></tr></thead>
+          <tbody>${s.testResults.map(r => `
+            <tr><td>TC-${r.testCaseId}</td><td>${verdictBadge(r.status)}</td><td>${r.timeMs ? r.timeMs+'ms' : '—'}</td></tr>
+          `).join('')}</tbody>
+        </table></div>` : ''}`;
+    document.getElementById('sub-detail-content').innerHTML = html;
+    openModal('modal-sub-detail');
+  } catch(e) { toast('Lỗi: ' + e.message, 'error'); }
+}
+
+// ─── API Keys ────────────────────────────────────────────────────
+async function loadApiKeys() {
+  if (!apiKey) return;
+  try {
+    const keys = await api('/api/v1/admin/api-keys');
+    const rows = keys.map(k => `
+      <tr>
+        <td>${k.id}</td>
+        <td>${k.clientName}</td>
+        <td><code style="font-size:11px">${k.key.substring(0,20)}…</code></td>
+        <td>${k.rateLimitPerHour}/hr</td>
+        <td>${k.admin ? '<span class="badge badge-purple">Admin</span>' : '—'}</td>
+        <td>${k.active ? '<span class="badge badge-green">Active</span>' : '<span class="badge badge-red">Inactive</span>'}</td>
+        <td>${fmtDate(k.createdAt)}</td>
+        <td>
+          ${k.active
+            ? `<button class="btn btn-danger btn-sm" onclick="toggleKey(${k.id},false)">Deactivate</button>`
+            : `<button class="btn btn-success btn-sm" onclick="toggleKey(${k.id},true)">Activate</button>`}
+        </td>
+      </tr>`).join('') || '<tr><td colspan="8"><div class="empty"><p>Chưa có API key</p></div></td></tr>';
+    document.getElementById('keys-body').innerHTML = rows;
+  } catch(e) { toast('Lỗi: ' + e.message, 'error'); }
+}
+
+async function createApiKey() {
+  try {
+    const k = await api('/api/v1/admin/api-keys', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        clientName: document.getElementById('k-name').value.trim(),
+        rateLimitPerHour: +document.getElementById('k-rate').value,
+        isAdmin: document.getElementById('k-admin').checked
+      })
+    });
+    closeModal('modal-apikey');
+    document.getElementById('k-name').value = '';
+    document.getElementById('k-rate').value = 100;
+    document.getElementById('k-admin').checked = false;
+
+    document.getElementById('new-key-display').innerHTML = `
+      <div class="key-new">
+        <label>⚠️ Lưu API key này ngay — chỉ hiển thị một lần!</label>
+        <div class="key-val">
+          <button class="btn btn-ghost btn-sm copy-key" onclick="navigator.clipboard.writeText('${k.key}');toast('Đã copy!','success')">📋 Copy</button>
+          ${k.key}
+        </div>
+      </div>`;
+    toast('Tạo API key thành công!', 'success');
+    loadApiKeys();
+  } catch(e) { toast('Lỗi: ' + e.message, 'error'); }
+}
+
+async function toggleKey(id, activate) {
+  const action = activate ? 'activate' : 'deactivate';
+  if (!confirm(`${activate ? 'Kích hoạt' : 'Vô hiệu hóa'} API key #${id}?`)) return;
+  try {
+    await api(`/api/v1/admin/api-keys/${id}/${action}`, { method: 'PATCH' });
+    toast('Cập nhật thành công!', 'success');
+    loadApiKeys();
+  } catch(e) { toast('Lỗi: ' + e.message, 'error'); }
+}
+
+// ─── Pagination ──────────────────────────────────────────────────
+function renderPagination(containerId, page, loadFn) {
+  const container = document.getElementById(containerId);
+  if (!page || page.totalPages <= 1) { container.innerHTML = ''; return; }
+  let html = '';
+  if (!page.first) html += `<button onclick="(${loadFn.name})(${page.number-1})">‹ Prev</button>`;
+  html += `<span>Trang ${page.number+1} / ${page.totalPages}</span>`;
+  if (!page.last) html += `<button onclick="(${loadFn.name})(${page.number+1})">Next ›</button>`;
+  container.innerHTML = html;
+}
+
+// ─── ZIP parsing & batch upload ──────────────────────────────────
+async function parseZipFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+  document.getElementById('fname-zip').textContent = file.name;
+  document.getElementById('zone-zip').classList.add('has-file');
+  document.getElementById('zip-preview').innerHTML = '<div class="empty"><p>Đang đọc ZIP…</p></div>';
+  try {
+    const zip = await JSZip.loadAsync(file);
+    const inMap = {}, outMap = {};
+    for (const [path, entry] of Object.entries(zip.files)) {
+      if (entry.dir) continue;
+      const fname = path.split('/').pop();
+      const dot = fname.lastIndexOf('.');
+      if (dot < 0) continue;
+      const base = fname.substring(0, dot);
+      const ext = fname.substring(dot + 1).toLowerCase();
+      if (ext === 'in') inMap[base] = { name: fname, entry };
+      else if (ext === 'out') outMap[base] = { name: fname, entry };
+    }
+    const bases = [...new Set([...Object.keys(inMap), ...Object.keys(outMap)])]
+      .filter(b => inMap[b] && outMap[b])
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+
+    if (bases.length === 0) {
+      document.getElementById('zip-preview').innerHTML = '<div class="alert alert-info">Không tìm thấy cặp .in/.out nào trong ZIP.</div>';
+      return;
+    }
+    zipPairs = [];
+    for (const base of bases) {
+      const inContent  = await inMap[base].entry.async('string');
+      const outContent = await outMap[base].entry.async('string');
+      zipPairs.push({ basename: base, inName: inMap[base].name, outName: outMap[base].name, inContent, outContent, score: 1, sample: false });
+    }
+    renderZipPreview();
+  } catch(e) {
+    document.getElementById('zip-preview').innerHTML = `<div class="alert" style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:#fca5a5">Lỗi đọc ZIP: ${escHtml(e.message)}</div>`;
+  }
+}
+
+// drag-and-drop support for ZIP zone
+document.addEventListener('DOMContentLoaded', () => {
+  const zone = document.getElementById('zone-zip');
+  if (!zone) return;
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.style.borderColor = 'var(--accent)'; });
+  zone.addEventListener('dragleave', () => { zone.style.borderColor = ''; });
+  zone.addEventListener('drop', e => {
+    e.preventDefault(); zone.style.borderColor = '';
+    const dt = e.dataTransfer;
+    if (dt.files.length) { document.getElementById('file-zip').files = dt.files; parseZipFile(document.getElementById('file-zip')); }
+  });
+});
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function renderZipPreview() {
+  const rows = zipPairs.map((p, i) => `
+    <tr>
+      <td style="font-weight:700;color:var(--muted)">${i+1}</td>
+      <td><code style="font-size:11px">${escHtml(p.inName)}</code></td>
+      <td><code style="font-size:11px">${escHtml(p.outName)}</code></td>
+      <td><input type="number" value="${p.score}" min="0" style="width:58px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:3px 6px;color:var(--text);font-size:12px;outline:none" onchange="zipPairs[${i}].score=+this.value"/></td>
+      <td style="text-align:center"><input type="checkbox" ${p.sample?'checked':''} onchange="zipPairs[${i}].sample=this.checked" style="accent-color:var(--accent);width:14px;height:14px"/></td>
+      <td><button class="btn btn-ghost btn-sm" onclick="toggleZipPreview(${i},this)">👁</button></td>
+    </tr>
+    <tr id="zip-prev-row-${i}" style="display:none">
+      <td colspan="6" style="padding:0;border-bottom:1px solid var(--border)">
+        <div class="zip-prev-panel">
+          <div style="padding:10px 12px;border-right:1px solid var(--border)">
+            <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Input</div>
+            <pre class="zip-pre inp">${escHtml(p.inContent.slice(0,1000))}${p.inContent.length>1000?'\n\n… còn '+(p.inContent.length-1000)+' ký tự':''}</pre>
+          </div>
+          <div style="padding:10px 12px">
+            <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Output</div>
+            <pre class="zip-pre out">${escHtml(p.outContent.slice(0,1000))}${p.outContent.length>1000?'\n\n… còn '+(p.outContent.length-1000)+' ký tự':''}</pre>
+          </div>
+        </div>
+      </td>
+    </tr>`).join('');
+
+  document.getElementById('zip-preview').innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <div style="font-size:13px;font-weight:700">Tìm thấy <span style="color:var(--accent)">${zipPairs.length}</span> cặp test case</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <span style="font-size:12px;color:var(--muted)">Score mặc định:</span>
+        <input id="zip-default-score" type="number" value="1" style="width:58px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--text);font-size:12px;outline:none" onchange="applyDefaultScore()"/>
+        <button class="btn btn-primary btn-sm" id="btn-upload-zip" onclick="uploadZipBatch()">⬆ Upload tất cả</button>
+      </div>
+    </div>
+    <div class="table-wrap" style="max-height:300px;overflow-y:auto">
+      <table>
+        <thead><tr><th>#</th><th>Input</th><th>Output</th><th>Score</th><th>Sample</th><th>Preview</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
+
+function toggleZipPreview(i, btn) {
+  const row = document.getElementById('zip-prev-row-' + i);
+  const visible = row.style.display !== 'none';
+  row.style.display = visible ? 'none' : '';
+  btn.textContent = visible ? '👁' : '🔼';
+}
+
+function applyDefaultScore() {
+  const score = +document.getElementById('zip-default-score').value;
+  zipPairs.forEach((p, i) => {
+    p.score = score;
+    const inputs = document.querySelectorAll('#zip-preview tbody tr:not([id^="zip-prev-row"]) input[type=number]');
+    if (inputs[i]) inputs[i].value = score;
+  });
+}
+
+async function uploadZipBatch() {
+  if (!zipPairs.length) { toast('Không có test case nào', 'error'); return; }
+  const pid = document.getElementById('tc-problem-id').value;
+  const btn = document.getElementById('btn-upload-zip');
+  btn.disabled = true;
+  const prog = document.getElementById('zip-progress');
+  const progText = document.getElementById('zip-progress-text');
+  const progBar = document.getElementById('zip-progress-bar');
+  prog.style.display = '';
+
+  let ok = 0;
+  for (let i = 0; i < zipPairs.length; i++) {
+    const p = zipPairs[i];
+    progText.textContent = `Uploading ${i+1}/${zipPairs.length} — ${p.inName}`;
+    progBar.style.width = (i / zipPairs.length * 100) + '%';
+    try {
+      const fd = new FormData();
+      fd.append('input',  new Blob([p.inContent],  { type: 'text/plain' }), p.inName);
+      fd.append('output', new Blob([p.outContent], { type: 'text/plain' }), p.outName);
+      fd.append('score', p.score);
+      fd.append('isSample', p.sample);
+      await api(`/api/v1/admin/problems/${pid}/test-cases`, { method: 'POST', body: fd });
+      ok++;
+    } catch(e) { console.warn('Upload failed:', p.inName, e.message); }
+  }
+
+  progBar.style.width = '100%';
+  const fail = zipPairs.length - ok;
+  progText.textContent = `Hoàn tất: ${ok} thành công${fail ? ', ' + fail + ' thất bại' : ''}.`;
+  toast(`Upload ${ok}/${zipPairs.length} test case thành công!`, ok === zipPairs.length ? 'success' : 'error');
+  btn.disabled = false;
+
+  setTimeout(() => { prog.style.display = 'none'; }, 3000);
+  resetZipTab();
+  await refreshTestCaseList(pid);
+}
+
+// ─── Boot ────────────────────────────────────────────────────────
+if (apiKey) loadDashboard();
+</script>
+</body>
+</html>
