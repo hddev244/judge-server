@@ -466,14 +466,15 @@ HEADERS    = {<span class="s">"X-API-Key"</span>: <span class="s">"your_api_key"
   <span class="p">"id"</span>:              <span class="n">1</span>,
   <span class="p">"slug"</span>:            <span class="s">"a-plus-b"</span>,
   <span class="p">"title"</span>:           <span class="s">"A + B"</span>,
-  <span class="p">"description"</span>:     <span class="s">"Nhập hai số nguyên A, B. In ra tổng A+B."</span>,
-  <span class="p">"timeLimitMs"</span>:     <span class="n">1000</span>,
-  <span class="p">"memoryLimitKb"</span>:   <span class="n">65536</span>,
-  <span class="p">"published"</span>:       <span class="k">true</span>,
-  <span class="p">"checkerType"</span>:     <span class="s">"EXACT"</span>,     <span class="c">// "EXACT" | "CUSTOM"</span>
-  <span class="p">"checkerLanguage"</span>: <span class="k">null</span>,
-  <span class="p">"hasChecker"</span>:      <span class="k">false</span>,
-  <span class="p">"createdAt"</span>:       <span class="s">"2026-04-17T08:00:00"</span>
+  <span class="p">"description"</span>:        <span class="s">"Nhập hai số nguyên A, B. In ra tổng A+B."</span>,
+  <span class="p">"descriptionFormat"</span>:   <span class="s">"MARKDOWN"</span>,  <span class="c">// "MARKDOWN" | "HTML"</span>
+  <span class="p">"timeLimitMs"</span>:         <span class="n">1000</span>,
+  <span class="p">"memoryLimitKb"</span>:       <span class="n">65536</span>,
+  <span class="p">"published"</span>:           <span class="k">true</span>,
+  <span class="p">"checkerType"</span>:         <span class="s">"EXACT"</span>,     <span class="c">// "EXACT" | "CUSTOM"</span>
+  <span class="p">"checkerLanguage"</span>:     <span class="k">null</span>,
+  <span class="p">"hasChecker"</span>:          <span class="k">false</span>,
+  <span class="p">"createdAt"</span>:           <span class="s">"2026-04-17T08:00:00"</span>
 }</pre>
         </div>
       </div>
@@ -572,6 +573,16 @@ HEADERS    = {<span class="s">"X-API-Key"</span>: <span class="s">"your_api_key"
       <tr><td><span class="method PUT" style="display:inline-block">PUT</span></td><td><code>/api/v1/admin/problems/{id}</code></td><td>Cập nhật title, description, limits</td></tr>
       <tr><td><span class="method POST" style="display:inline-block">POST</span></td><td><code>/api/v1/admin/problems/{id}/publish</code></td><td>Publish (cần có ≥1 test case)</td></tr>
     </table>
+    <p style="font-size:13px;font-weight:700;margin:0 0 8px">Request body (POST / PUT)</p>
+    <table style="margin-bottom:20px">
+      <tr><th>Field</th><th>Type</th><th>Mô tả</th></tr>
+      <tr><td><code>slug</code></td><td><code>string</code></td><td>Slug duy nhất, chỉ chứa <code>[a-z0-9-]</code> — <strong>bắt buộc</strong></td></tr>
+      <tr><td><code>title</code></td><td><code>string</code></td><td>Tiêu đề bài — <strong>bắt buộc</strong></td></tr>
+      <tr><td><code>description</code></td><td><code>string</code></td><td>Nội dung bài (Markdown hoặc HTML tùy <code>descriptionFormat</code>)</td></tr>
+      <tr><td><code>descriptionFormat</code></td><td><code>"MARKDOWN" | "HTML"</code></td><td>Format của description — mặc định <code>"MARKDOWN"</code></td></tr>
+      <tr><td><code>timeLimitMs</code></td><td><code>number</code></td><td>Giới hạn thời gian (100–10000 ms)</td></tr>
+      <tr><td><code>memoryLimitKb</code></td><td><code>number</code></td><td>Giới hạn bộ nhớ (16384–1048576 KB)</td></tr>
+    </table>
 
     <!-- Test Cases -->
     <p style="font-size:11px;font-weight:700;margin:20px 0 10px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px">TEST CASES</p>
@@ -630,8 +641,8 @@ HEADERS    = {<span class="s">"X-API-Key"</span>: <span class="s">"your_api_key"
         <pre><span class="c"># 1. Tạo problem</span>
 curl -X POST http://&lt;server-ip&gt;:8080/api/v1/admin/problems \
   -H <span class="s">"X-API-Key: ADMIN_KEY"</span> -H <span class="s">"Content-Type: application/json"</span> \
-  -d <span class="s">'{"slug":"a-plus-b","title":"A + B","timeLimitMs":1000,"memoryLimitKb":65536}'</span>
-<span class="c"># → {"id":1,"slug":"a-plus-b",...}</span>
+  -d <span class="s">'{"slug":"a-plus-b","title":"A + B","description":"**Cho hai số nguyên...**","descriptionFormat":"MARKDOWN","timeLimitMs":1000,"memoryLimitKb":65536}'</span>
+<span class="c"># → {"id":1,"slug":"a-plus-b","descriptionFormat":"MARKDOWN",...}</span>
 
 <span class="c"># 2. Upload test case mẫu (isSample=true → dùng được với Test Run)</span>
 curl -X POST http://&lt;server-ip&gt;:8080/api/v1/admin/problems/<span class="n">1</span>/test-cases \
@@ -779,6 +790,7 @@ curl -X POST http://&lt;server-ip&gt;:8080/api/v1/admin/problems/<span class="n"
           <pre><span class="n">slug</span>: <span class="s">a-plus-b</span>
 <span class="n">title</span>: <span class="s">"A + B Problem"</span>
 <span class="n">description</span>: <span class="s">"Nhập hai số nguyên a, b. In ra a+b."</span>
+<span class="n">description_format</span>: <span class="s">MARKDOWN</span>   <span class="c"># tùy chọn: MARKDOWN (mặc định) | HTML</span>
 <span class="n">timeLimitMs</span>: <span class="v">1000</span>
 <span class="n">memoryLimitKb</span>: <span class="v">262144</span></pre>
         </div>

@@ -21,6 +21,10 @@ public class Problem {
     @Column(columnDefinition = "TEXT")
     private String description;
 
+    @Column(name = "description_format", length = 10, nullable = false)
+    @Builder.Default
+    private String descriptionFormat = "MARKDOWN";
+
     @Column(name = "time_limit_ms", nullable = false)
     private int timeLimitMs;
 

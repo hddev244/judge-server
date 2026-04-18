@@ -14,6 +14,9 @@ public class ProblemRequest {
 
     private String description;
 
+    @Pattern(regexp = "MARKDOWN|HTML", message = "descriptionFormat must be MARKDOWN or HTML")
+    private String descriptionFormat = "MARKDOWN";
+
     @Min(100) @Max(10000)
     private int timeLimitMs = 2000;
 

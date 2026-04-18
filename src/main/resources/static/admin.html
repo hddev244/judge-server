@@ -279,6 +279,9 @@ code{font-family:var(--mono);font-size:12px;background:var(--surface2);padding:2
     <div class="form-group"><label>Slug <span style="color:var(--red)">*</span></label><input id="p-slug" placeholder="a-plus-b"/></div>
     <div class="form-group"><label>Title <span style="color:var(--red)">*</span></label><input id="p-title" placeholder="A + B Problem"/></div>
     <div class="form-group"><label>Description</label><textarea id="p-desc" placeholder="Mô tả bài toán..."></textarea></div>
+    <div class="form-group"><label>Format</label>
+      <select id="p-desc-format" class="input"><option value="MARKDOWN">Markdown</option><option value="HTML">HTML</option></select>
+    </div>
     <div class="form-row">
       <div class="form-group"><label>Time limit (ms)</label><input id="p-time" type="number" value="2000"/></div>
       <div class="form-group"><label>Memory limit (KB)</label><input id="p-mem" type="number" value="262144"/></div>
@@ -298,6 +301,9 @@ code{font-family:var(--mono);font-size:12px;background:var(--surface2);padding:2
     <input type="hidden" id="ep-slug"/>
     <div class="form-group"><label>Title</label><input id="ep-title"/></div>
     <div class="form-group"><label>Description</label><textarea id="ep-desc"></textarea></div>
+    <div class="form-group"><label>Format</label>
+      <select id="ep-desc-format" class="input"><option value="MARKDOWN">Markdown</option><option value="HTML">HTML</option></select>
+    </div>
     <div class="form-row">
       <div class="form-group"><label>Time limit (ms)</label><input id="ep-time" type="number"/></div>
       <div class="form-group"><label>Memory limit (KB)</label><input id="ep-mem" type="number"/></div>
@@ -621,7 +627,7 @@ async function loadProblems(page = 0) {
         <td style="display:flex;gap:5px;flex-wrap:wrap">
           <button class="btn btn-ghost btn-sm" onclick="openTestCases(${p.id},'${p.title.replace(/'/g,"\\'")}')">🧪</button>
           <button class="btn btn-ghost btn-sm" onclick="openChecker(${p.id},'${p.title.replace(/'/g,"\\'")}','${p.checkerType||'EXACT'}','${p.checkerLanguage||'cpp'}')">⚖️</button>
-          <button class="btn btn-ghost btn-sm" onclick="openEdit(${p.id},'${p.slug}','${p.title.replace(/'/g,"\\'")}','${(p.description||'').replace(/'/g,"\\'").replace(/\n/g,'\\n')}',${p.timeLimitMs},${p.memoryLimitKb})">✏️</button>
+          <button class="btn btn-ghost btn-sm" onclick="openEdit(${p.id},'${p.slug}','${p.title.replace(/'/g,"\\'")}','${(p.description||'').replace(/'/g,"\\'").replace(/\n/g,'\\n')}',${p.timeLimitMs},${p.memoryLimitKb},'${p.descriptionFormat||'MARKDOWN'}')">✏️</button>
           ${!p.published ? `<button class="btn btn-success btn-sm" onclick="publishProblem(${p.id})">Publish</button>` : ''}
         </td>
       </tr>`).join('')
@@ -642,6 +648,7 @@ async function createProblem() {
         slug: document.getElementById('p-slug').value.trim(),
         title: document.getElementById('p-title').value.trim(),
         description: document.getElementById('p-desc').value.trim(),
+        descriptionFormat: document.getElementById('p-desc-format').value,
         timeLimitMs: +document.getElementById('p-time').value,
         memoryLimitKb: +document.getElementById('p-mem').value
       })
@@ -652,17 +659,19 @@ async function createProblem() {
     ['p-slug','p-title','p-desc'].forEach(id => document.getElementById(id).value = '');
     document.getElementById('p-time').value = 2000;
     document.getElementById('p-mem').value = 262144;
+    document.getElementById('p-desc-format').value = 'MARKDOWN';
   } catch(e) { toast('Lỗi: ' + e.message, 'error'); }
   finally { btn.disabled = false; btn.textContent = 'Tạo'; }
 }
 
-function openEdit(id, slug, title, desc, time, mem) {
+function openEdit(id, slug, title, desc, time, mem, format) {
   document.getElementById('ep-id').value = id;
   document.getElementById('ep-slug').value = slug;
   document.getElementById('ep-title').value = title;
   document.getElementById('ep-desc').value = desc.replace(/\\n/g,'\n');
   document.getElementById('ep-time').value = time;
   document.getElementById('ep-mem').value = mem;
+  document.getElementById('ep-desc-format').value = format || 'MARKDOWN';
   openModal('modal-edit-problem');
 }
 
@@ -676,6 +685,7 @@ async function updateProblem() {
         slug: document.getElementById('ep-slug').value,
         title: document.getElementById('ep-title').value.trim(),
         description: document.getElementById('ep-desc').value.trim(),
+        descriptionFormat: document.getElementById('ep-desc-format').value,
         timeLimitMs: +document.getElementById('ep-time').value,
         memoryLimitKb: +document.getElementById('ep-mem').value
       })

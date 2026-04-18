@@ -61,6 +61,8 @@ public class AdminController {
         requireAdmin();
         ApiKey key = apiKeyRepository.findById(id)
                 .orElseThrow(() -> JudgeException.notFound("API key not found"));
+        if (key.isAdmin() && key.isActive() && apiKeyRepository.countByIsAdminTrueAndIsActiveTrue() <= 1)
+            throw JudgeException.badRequest("Cannot deactivate the last active admin key");
         key.setActive(false);
         return ResponseEntity.ok(ApiKeyResponse.from(apiKeyRepository.save(key)));
     }

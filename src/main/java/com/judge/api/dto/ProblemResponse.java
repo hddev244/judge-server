@@ -13,6 +13,7 @@ public class ProblemResponse {
     private String slug;
     private String title;
     private String description;
+    private String descriptionFormat;
     private int timeLimitMs;
     private int memoryLimitKb;
     private boolean isPublished;
@@ -28,6 +29,7 @@ public class ProblemResponse {
                 .slug(p.getSlug())
                 .title(p.getTitle())
                 .description(p.getDescription())
+                .descriptionFormat(p.getDescriptionFormat())
                 .timeLimitMs(p.getTimeLimitMs())
                 .memoryLimitKb(p.getMemoryLimitKb())
                 .isPublished(p.isPublished())

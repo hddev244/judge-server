@@ -68,10 +68,16 @@ public class ProblemImportService {
             throw JudgeException.badRequest("Slug already exists: " + slug);
         }
 
+        String descFormat = getString(meta, "description_format");
+        if (descFormat == null) descFormat = "MARKDOWN";
+        if (!descFormat.equals("MARKDOWN") && !descFormat.equals("HTML"))
+            throw JudgeException.badRequest("description_format must be MARKDOWN or HTML");
+
         Problem problem = Problem.builder()
                 .slug(slug)
                 .title(title)
                 .description(getString(meta, "description"))
+                .descriptionFormat(descFormat)
                 .timeLimitMs(getInt(meta, "timeLimitMs", 2000))
                 .memoryLimitKb(getInt(meta, "memoryLimitKb", 262144))
                 .isPublished(false)

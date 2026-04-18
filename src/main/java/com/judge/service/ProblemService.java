@@ -48,6 +48,7 @@ public class ProblemService {
                 .slug(req.getSlug())
                 .title(req.getTitle())
                 .description(req.getDescription())
+                .descriptionFormat(req.getDescriptionFormat() != null ? req.getDescriptionFormat() : "MARKDOWN")
                 .timeLimitMs(req.getTimeLimitMs())
                 .memoryLimitKb(req.getMemoryLimitKb())
                 .isPublished(false)
@@ -60,6 +61,7 @@ public class ProblemService {
         Problem problem = getOrThrow(id);
         problem.setTitle(req.getTitle());
         problem.setDescription(req.getDescription());
+        problem.setDescriptionFormat(req.getDescriptionFormat() != null ? req.getDescriptionFormat() : "MARKDOWN");
         problem.setTimeLimitMs(req.getTimeLimitMs());
         problem.setMemoryLimitKb(req.getMemoryLimitKb());
         return ProblemResponse.from(problemRepository.save(problem));

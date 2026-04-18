@@ -2,7 +2,7 @@ services:
   judge-api:
     build: .
     ports:
-      - "${SERVER_PORT:-8080}:8080"
+      - "${SERVER_PORT:-8080}:8433"
     env_file:
       - .env
     environment:
