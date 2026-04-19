@@ -6,6 +6,8 @@
 <title>Judge — Làm bài</title>
 <script src="https://cdn.jsdelivr.net/npm/marked@9/marked.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.6.1/sockjs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -201,6 +203,7 @@ const BASE = window.location.origin;
 let apiKey = localStorage.getItem('judge_key') || '';
 let currentProblem = null;
 let pollTimer = null;
+let stompClient = null;
 
 // Init API key
 const keyInput = document.getElementById('api-key');
@@ -239,7 +242,8 @@ async function loadProblems() {
     return;
   }
   try {
-    const problems = await api('/api/v1/problems');
+    const data = await api('/api/v1/problems?size=200');
+    const problems = data.content || [];
     if (!problems.length) {
       document.getElementById('prob-items').innerHTML = '<div class="prob-empty">Chưa có bài nào được publish</div>';
       return;
@@ -342,6 +346,7 @@ async function runSolution(isTestRun) {
   btnTest.disabled   = true;
 
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+  if (stompClient) { try { stompClient.disconnect(); } catch(e) {} stompClient = null; }
   resetResult();
 
   if (isTestRun) {
@@ -386,7 +391,7 @@ async function runSolution(isTestRun) {
       document.getElementById('result-sub-id').textContent = res.submissionId;
       renderResult(res);
       if (res.status === 'PENDING' || res.status === 'JUDGING') {
-        startPolling(res.submissionId);
+        startWsTracking(res.submissionId);
       }
     } catch(e) {
       toast('Nộp bài thất bại: ' + e.message);
@@ -396,6 +401,40 @@ async function runSolution(isTestRun) {
       btnTest.disabled   = false;
       btnSubmit.innerHTML = '▶ Nộp bài';
     }
+  }
+}
+
+function startWsTracking(subId) {
+  let wsConnected = false;
+  const wsTimeout = setTimeout(() => {
+    if (!wsConnected) startPolling(subId);  // fallback if WS fails to connect
+  }, 3000);
+
+  try {
+    const socket = new SockJS(BASE + '/ws');
+    stompClient = Stomp.over(socket);
+    stompClient.debug = null;  // silence STOMP debug logs
+    stompClient.connect({}, () => {
+      wsConnected = true;
+      clearTimeout(wsTimeout);
+      stompClient.subscribe('/topic/submissions/' + subId, (msg) => {
+        const result = JSON.parse(msg.body);
+        renderWsResult(result);
+        if (!['PENDING', 'JUDGING'].includes(result.status)) {
+          try { stompClient.disconnect(); } catch(e) {}
+          stompClient = null;
+          document.getElementById('btn-submit').disabled = false;
+          document.getElementById('btn-test').disabled = false;
+          document.getElementById('btn-submit').innerHTML = '▶ Nộp bài';
+        }
+      });
+    }, () => {
+      // STOMP error — fall back to polling
+      if (!wsConnected) { clearTimeout(wsTimeout); startPolling(subId); }
+    });
+  } catch(e) {
+    clearTimeout(wsTimeout);
+    startPolling(subId);
   }
 }
 
@@ -412,6 +451,23 @@ function startPolling(subId) {
     } catch(e) { /* ignore */ }
     if (attempts > 60) { clearInterval(pollTimer); pollTimer = null; }
   }, 1500);
+}
+
+function renderWsResult(msg) {
+  // WS payload: {submissionId, status, score, timeMs, errorMessage, testResults}
+  const adapted = {
+    status: msg.status,
+    score: msg.score ?? 0,
+    timeMs: msg.timeMs,
+    errorMessage: msg.errorMessage,
+    testResults: (msg.testResults || []).map(r => ({
+      testCaseId: r.testCaseId,
+      status: r.status,
+      timeMs: r.timeMs,
+      memoryKb: r.memoryKb
+    }))
+  };
+  renderResult(adapted);
 }
 
 function renderResult(s) {

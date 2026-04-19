@@ -51,6 +51,9 @@ public class Submission {
     @Column(name = "is_test_run", nullable = false)
     private boolean isTestRun;
 
+    @Column(name = "contest_id")
+    private Long contestId;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "client_id", nullable = false)
     private ApiKey client;
@@ -60,6 +63,9 @@ public class Submission {
 
     @Column(name = "finished_at")
     private LocalDateTime finishedAt;
+
+    @Version
+    private Long version;
 
     @OneToMany(mappedBy = "submission", fetch = FetchType.LAZY)
     private List<SubmissionResult> results;

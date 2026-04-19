@@ -28,9 +28,16 @@ public class JudgeWorker {
         while (!Thread.currentThread().isInterrupted()) {
             try {
                 queueService.dequeue().ifPresent(id -> {
-                    log.info("Processing submission: {}", id);
-                    queueService.markProcessing(id);
-                    judgeService.judge(id);
+                    if (!queueService.tryLock(id)) {
+                        log.warn("Submission {} already being processed by another worker, skipping", id);
+                        return;
+                    }
+                    try {
+                        log.info("Processing submission: {}", id);
+                        judgeService.judge(id);
+                    } finally {
+                        queueService.releaseLock(id);
+                    }
                 });
             } catch (Exception e) {
                 log.error("Worker error", e);

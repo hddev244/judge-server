@@ -10,7 +10,7 @@ import java.util.Optional;
 @Service
 public class JudgeQueueService {
 
-    private static final String PROCESSING_KEY = "judge:processing";
+    private static final String LOCK_PREFIX = "judge:lock:";
 
     private final StringRedisTemplate redis;
     private final JudgeConfig judgeConfig;
@@ -24,17 +24,23 @@ public class JudgeQueueService {
         redis.opsForList().leftPush(judgeConfig.getQueueKey(), submissionId);
     }
 
+    /** Blocking pop (BRPOP) — atomic, only one worker gets each item. */
     public Optional<String> dequeue() {
         String result = redis.opsForList().rightPop(judgeConfig.getQueueKey(), Duration.ofSeconds(2));
         return Optional.ofNullable(result);
     }
 
-    public void markProcessing(String submissionId) {
-        redis.opsForSet().add(PROCESSING_KEY, submissionId);
-        redis.expire(PROCESSING_KEY, Duration.ofMinutes(5));
+    /**
+     * SETNX with 10-minute TTL. Returns true if this worker acquired the lock,
+     * false if another worker is already processing this submission.
+     */
+    public boolean tryLock(String submissionId) {
+        Boolean acquired = redis.opsForValue()
+                .setIfAbsent(LOCK_PREFIX + submissionId, "1", Duration.ofMinutes(10));
+        return Boolean.TRUE.equals(acquired);
     }
 
-    public void markDone(String submissionId) {
-        redis.opsForSet().remove(PROCESSING_KEY, submissionId);
+    public void releaseLock(String submissionId) {
+        redis.delete(LOCK_PREFIX + submissionId);
     }
 }

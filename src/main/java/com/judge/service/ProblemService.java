@@ -2,14 +2,17 @@ package com.judge.service;
 
 import com.judge.api.dto.*;
 import com.judge.domain.Problem;
+import com.judge.domain.ProblemTag;
 import com.judge.domain.Subtask;
 import com.judge.domain.TestCase;
 import com.judge.exception.JudgeException;
 import com.judge.judge.DockerRunner;
-import com.judge.repository.ProblemRepository;
-import com.judge.repository.SubtaskRepository;
-import com.judge.repository.TestCaseRepository;
+import com.judge.repository.*;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -22,17 +25,20 @@ import java.util.List;
 public class ProblemService {
 
     private final ProblemRepository problemRepository;
+    private final ProblemTagRepository problemTagRepository;
     private final TestCaseRepository testCaseRepository;
     private final SubtaskRepository subtaskRepository;
     private final DockerRunner dockerRunner;
     private final String basePath;
 
     public ProblemService(ProblemRepository problemRepository,
+                          ProblemTagRepository problemTagRepository,
                           TestCaseRepository testCaseRepository,
                           SubtaskRepository subtaskRepository,
                           DockerRunner dockerRunner,
                           @Value("${judge.testcase.base-path}") String basePath) {
         this.problemRepository = problemRepository;
+        this.problemTagRepository = problemTagRepository;
         this.testCaseRepository = testCaseRepository;
         this.subtaskRepository = subtaskRepository;
         this.dockerRunner = dockerRunner;
@@ -51,9 +57,12 @@ public class ProblemService {
                 .descriptionFormat(req.getDescriptionFormat() != null ? req.getDescriptionFormat() : "MARKDOWN")
                 .timeLimitMs(req.getTimeLimitMs())
                 .memoryLimitKb(req.getMemoryLimitKb())
+                .difficulty(req.getDifficulty())
                 .isPublished(false)
                 .build();
-        return ProblemResponse.from(problemRepository.save(problem));
+        problem = problemRepository.save(problem);
+        List<String> tags = saveTags(problem, req.getTags());
+        return ProblemResponse.from(problem, tags);
     }
 
     @Transactional
@@ -64,7 +73,36 @@ public class ProblemService {
         problem.setDescriptionFormat(req.getDescriptionFormat() != null ? req.getDescriptionFormat() : "MARKDOWN");
         problem.setTimeLimitMs(req.getTimeLimitMs());
         problem.setMemoryLimitKb(req.getMemoryLimitKb());
-        return ProblemResponse.from(problemRepository.save(problem));
+        problem.setDifficulty(req.getDifficulty());
+        problem = problemRepository.save(problem);
+        problemTagRepository.deleteByProblemId(id);
+        List<String> tags = saveTags(problem, req.getTags());
+        return ProblemResponse.from(problem, tags);
+    }
+
+    @Transactional(readOnly = true)
+    public ProblemSearchResponse search(String q, List<String> tags, String difficulty, int page, int size) {
+        Specification<Problem> spec = ProblemSpecification.isPublished();
+        if (q != null && !q.isBlank())
+            spec = spec.and(ProblemSpecification.titleContains(q.trim()));
+        if (difficulty != null && !difficulty.isBlank())
+            spec = spec.and(ProblemSpecification.hasDifficulty(difficulty));
+        if (tags != null && !tags.isEmpty())
+            spec = spec.and(ProblemSpecification.hasTags(tags));
+
+        Page<Problem> result = problemRepository.findAll(spec,
+                PageRequest.of(page, size, Sort.by("id").ascending()));
+
+        List<ProblemResponse> content = result.getContent().stream()
+                .map(ProblemResponse::from)
+                .toList();
+
+        return ProblemSearchResponse.builder()
+                .content(content)
+                .totalElements(result.getTotalElements())
+                .page(page)
+                .size(size)
+                .build();
     }
 
     @Transactional(readOnly = true)
@@ -220,5 +258,20 @@ public class ProblemService {
 
     private void tryDelete(String path) {
         try { Files.deleteIfExists(Path.of(path)); } catch (IOException ignored) {}
+    }
+
+    /** Persists the tag list and returns the normalized tag strings. */
+    List<String> saveTags(Problem problem, List<String> rawTags) {
+        if (rawTags == null || rawTags.isEmpty()) return List.of();
+        return rawTags.stream()
+                .map(String::trim)
+                .filter(t -> !t.isBlank())
+                .distinct()
+                .map(tag -> {
+                    problemTagRepository.save(ProblemTag.builder()
+                            .problem(problem).tag(tag).build());
+                    return tag;
+                })
+                .toList();
     }
 }

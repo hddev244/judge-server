@@ -2,6 +2,7 @@ package com.judge.domain;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.Formula;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -33,6 +34,19 @@ public class Problem {
 
     @Column(name = "is_published", nullable = false)
     private boolean isPublished;
+
+    @Column(name = "difficulty", length = 10)
+    private String difficulty;
+
+    @OneToMany(mappedBy = "problem", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @OrderBy("id ASC")
+    private List<ProblemTag> tags;
+
+    @Formula("(SELECT COUNT(DISTINCT s.user_ref) FROM submissions s WHERE s.problem_id = id AND s.status = 'AC' AND s.is_test_run = false)")
+    private Long solvedCount;
+
+    @Formula("(SELECT ROUND(100.0 * COUNT(*) FILTER (WHERE s.status = 'AC') / NULLIF(COUNT(*), 0), 1) FROM submissions s WHERE s.problem_id = id AND s.is_test_run = false)")
+    private Double acceptanceRate;
 
     /** EXACT (default) or CUSTOM */
     @Column(name = "checker_type", nullable = false, length = 20)

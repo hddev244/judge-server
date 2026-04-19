@@ -13,6 +13,7 @@ public class RunResult {
     private final long memoryKb;
     private final boolean timedOut;
     private final boolean memoryExceeded;
+    private final boolean systemError;
 
     public static RunResult tle(long timeMs) {
         return RunResult.builder()
@@ -30,6 +31,15 @@ public class RunResult {
                 .exitCode(137)
                 .stdout("")
                 .stderr("Memory Limit Exceeded")
+                .build();
+    }
+
+    public static RunResult dockerUnavailable(String message) {
+        return RunResult.builder()
+                .systemError(true)
+                .exitCode(-1)
+                .stdout("")
+                .stderr(message)
                 .build();
     }
 }

@@ -58,6 +58,7 @@ management:
   endpoint:
     health:
       show-details: when-authorized
+      show-components: always
 
 ---
 spring:

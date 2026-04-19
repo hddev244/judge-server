@@ -7,6 +7,7 @@ import com.judge.domain.TestCase;
 import com.judge.exception.JudgeException;
 import com.judge.judge.DockerRunner;
 import com.judge.repository.ProblemRepository;
+import com.judge.repository.ProblemTagRepository;
 import com.judge.repository.SubtaskRepository;
 import com.judge.repository.TestCaseRepository;
 import org.springframework.beans.factory.annotation.Value;
@@ -24,20 +25,26 @@ import java.util.zip.ZipInputStream;
 public class ProblemImportService {
 
     private final ProblemRepository problemRepository;
+    private final ProblemTagRepository problemTagRepository;
     private final TestCaseRepository testCaseRepository;
     private final SubtaskRepository subtaskRepository;
     private final DockerRunner dockerRunner;
+    private final ProblemService problemService;
     private final String basePath;
 
     public ProblemImportService(ProblemRepository problemRepository,
+                                 ProblemTagRepository problemTagRepository,
                                  TestCaseRepository testCaseRepository,
                                  SubtaskRepository subtaskRepository,
                                  DockerRunner dockerRunner,
+                                 ProblemService problemService,
                                  @Value("${judge.testcase.base-path}") String basePath) {
         this.problemRepository = problemRepository;
+        this.problemTagRepository = problemTagRepository;
         this.testCaseRepository = testCaseRepository;
         this.subtaskRepository = subtaskRepository;
         this.dockerRunner = dockerRunner;
+        this.problemService = problemService;
         this.basePath = basePath;
     }
 
@@ -73,6 +80,10 @@ public class ProblemImportService {
         if (!descFormat.equals("MARKDOWN") && !descFormat.equals("HTML"))
             throw JudgeException.badRequest("description_format must be MARKDOWN or HTML");
 
+        String difficulty = getString(meta, "difficulty");
+        if (difficulty != null && !List.of("easy", "medium", "hard").contains(difficulty))
+            throw JudgeException.badRequest("difficulty must be easy, medium, or hard");
+
         Problem problem = Problem.builder()
                 .slug(slug)
                 .title(title)
@@ -80,9 +91,20 @@ public class ProblemImportService {
                 .descriptionFormat(descFormat)
                 .timeLimitMs(getInt(meta, "timeLimitMs", 2000))
                 .memoryLimitKb(getInt(meta, "memoryLimitKb", 262144))
+                .difficulty(difficulty)
                 .isPublished(false)
                 .build();
         problem = problemRepository.save(problem);
+
+        // tags
+        Object tagsObj = meta.get("tags");
+        if (tagsObj instanceof List<?> rawTags) {
+            List<String> tagNames = rawTags.stream()
+                    .filter(t -> t != null)
+                    .map(Object::toString)
+                    .toList();
+            problemService.saveTags(problem, tagNames);
+        }
 
         // ── test cases ───────────────────────────────────────────────────────
         Map<String, byte[]> inputs = new LinkedHashMap<>();

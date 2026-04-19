@@ -7,6 +7,7 @@ import lombok.Getter;
 @Builder
 public class CompileResult {
     private final boolean success;
+    private final boolean systemError;
     private final String workDir;
     private final String errorOutput;
 }

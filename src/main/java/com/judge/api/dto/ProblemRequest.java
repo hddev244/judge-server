@@ -2,6 +2,7 @@ package com.judge.api.dto;
 
 import jakarta.validation.constraints.*;
 import lombok.Data;
+import java.util.List;
 
 @Data
 public class ProblemRequest {
@@ -22,4 +23,9 @@ public class ProblemRequest {
 
     @Min(16384) @Max(1048576)
     private int memoryLimitKb = 262144;
+
+    @Pattern(regexp = "easy|medium|hard", message = "difficulty must be easy, medium, or hard")
+    private String difficulty;
+
+    private List<String> tags;
 }

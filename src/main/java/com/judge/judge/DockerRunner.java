@@ -40,10 +40,20 @@ public class DockerRunner {
         ProcessResult result = runProcess(cmd, 30_000);
 
         if (result.exitCode() != 0) {
+            String output = result.stderr().isBlank() ? result.stdout() : result.stderr();
+            if (isDockerDaemonError(output)) {
+                log.error("Docker daemon unavailable during compile, jobId={}: {}", jobId, output.trim());
+                return CompileResult.builder()
+                        .success(false)
+                        .systemError(true)
+                        .workDir(workDir.toString())
+                        .errorOutput(output.trim())
+                        .build();
+            }
             return CompileResult.builder()
                     .success(false)
                     .workDir(workDir.toString())
-                    .errorOutput(result.stderr().isBlank() ? result.stdout() : result.stderr())
+                    .errorOutput(output)
                     .build();
         }
 
@@ -83,6 +93,11 @@ public class DockerRunner {
             if (result.timedOut() || result.exitCode() == 124) return RunResult.tle(elapsed);
             if (result.exitCode() == 137) return RunResult.mle();
 
+            if (isDockerDaemonError(result.stderr())) {
+                log.error("Docker daemon unavailable during run, workDir={}: {}", workDir, result.stderr().trim());
+                return RunResult.dockerUnavailable(result.stderr().trim());
+            }
+
             return RunResult.builder()
                     .stdout(result.stdout())
                     .stderr(result.stderr())
@@ -91,8 +106,8 @@ public class DockerRunner {
                     .build();
 
         } catch (IOException e) {
-            log.error("Docker run failed for workDir={}", workDir, e);
-            return RunResult.builder().exitCode(1).stderr(e.getMessage()).stdout("").build();
+            log.error("Docker run failed (binary unavailable?), workDir={}", workDir, e);
+            return RunResult.dockerUnavailable(e.getMessage());
         }
     }
 
@@ -240,6 +255,14 @@ public class DockerRunner {
                         try { Files.delete(p); } catch (IOException ignored) {}
                     });
         }
+    }
+
+    static boolean isDockerDaemonError(String text) {
+        if (text == null || text.isBlank()) return false;
+        return text.contains("Cannot connect to the Docker daemon")
+                || text.contains("Is the docker daemon running")
+                || text.contains("docker: not found")
+                || text.contains("executable file not found");
     }
 
     private record ProcessResult(String stdout, String stderr, int exitCode, boolean timedOut) {}

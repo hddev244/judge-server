@@ -9,6 +9,7 @@ import com.judge.judge.model.CompileResult;
 import com.judge.judge.model.RunResult;
 import com.judge.queue.JudgeQueueService;
 import com.judge.repository.*;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import com.judge.webhook.WebhookSender;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,6 +35,7 @@ public class JudgeService {
     private final JudgeQueueService queueService;
     private final WebhookSender webhookSender;
     private final JudgeConfig judgeConfig;
+    private final JudgeStatusPublisher statusPublisher;
 
     public JudgeService(SubmissionRepository submissionRepository,
                         TestCaseRepository testCaseRepository,
@@ -44,7 +46,8 @@ public class JudgeService {
                         OutputComparator comparator,
                         JudgeQueueService queueService,
                         WebhookSender webhookSender,
-                        JudgeConfig judgeConfig) {
+                        JudgeConfig judgeConfig,
+                        JudgeStatusPublisher statusPublisher) {
         this.submissionRepository = submissionRepository;
         this.testCaseRepository = testCaseRepository;
         this.submissionResultRepository = submissionResultRepository;
@@ -55,6 +58,7 @@ public class JudgeService {
         this.queueService = queueService;
         this.webhookSender = webhookSender;
         this.judgeConfig = judgeConfig;
+        this.statusPublisher = statusPublisher;
     }
 
     @Transactional
@@ -74,31 +78,47 @@ public class JudgeService {
             return;
         }
 
-        submission.setStatus("JUDGING");
-        submissionRepository.save(submission);
-
-        Problem problem = submission.getProblem();
-        List<TestCase> testCases = testCaseRepository
-                .findByProblemIdOrderByOrderIndexAsc(problem.getId());
-        List<Subtask> subtasks = subtaskRepository
-                .findByProblemIdOrderByOrderIndexAsc(problem.getId());
-
-        String finalVerdict = "AC";
-        int totalScore = 0;
-        long maxTimeMs = 0;
-
         try {
+            submission.setStatus("JUDGING");
+            submissionRepository.save(submission);
+        } catch (ObjectOptimisticLockingFailureException e) {
+            log.warn("Submission {} is already being processed by another worker (version conflict), skipping", submissionId);
+            return;
+        }
+
+        List<JudgeStatusPublisher.TestCaseUpdate> partialResults = new ArrayList<>();
+        try {
+            Problem problem = submission.getProblem();
+            List<TestCase> testCases = testCaseRepository
+                    .findByProblemIdOrderByOrderIndexAsc(problem.getId());
+            List<Subtask> subtasks = subtaskRepository
+                    .findByProblemIdOrderByOrderIndexAsc(problem.getId());
+
+            String finalVerdict = "AC";
+            int totalScore = 0;
+            long maxTimeMs = 0;
+
             CompileResult compileResult = dockerRunner.compile(
                     submission.getLanguage(),
                     submission.getSourceCode(),
                     submissionId
             );
 
+            if (compileResult.isSystemError()) {
+                log.error("Docker unavailable during compile for submission {}", submissionId);
+                submission.setStatus("SE");
+                submission.setErrorMessage("Docker daemon unavailable: " + compileResult.getErrorOutput());
+                submission.setFinishedAt(LocalDateTime.now());
+                submissionRepository.save(submission);
+                statusPublisher.publishFinal(submission, List.of());
+                return;
+            }
             if (!compileResult.isSuccess()) {
                 submission.setStatus("CE");
                 submission.setErrorMessage(compileResult.getErrorOutput());
                 submission.setFinishedAt(LocalDateTime.now());
                 submissionRepository.save(submission);
+                statusPublisher.publishFinal(submission, List.of());
                 return;
             }
 
@@ -126,6 +146,14 @@ public class JudgeService {
                         .timeMs((int) rr.getTimeMs())
                         .memoryKb((int) rr.getMemoryKb())
                         .build());
+
+                partialResults.add(JudgeStatusPublisher.TestCaseUpdate.builder()
+                        .testCaseId(tc.getId())
+                        .status(verdict)
+                        .timeMs((int) rr.getTimeMs())
+                        .memoryKb((int) rr.getMemoryKb())
+                        .build());
+                statusPublisher.publishPartial(submissionId, partialResults);
 
                 if (!"AC".equals(verdict)) {
                     if ("AC".equals(finalVerdict)) finalVerdict = verdict;
@@ -160,6 +188,7 @@ public class JudgeService {
             submission.setTimeMs((int) maxTimeMs);
             submission.setFinishedAt(LocalDateTime.now());
             submissionRepository.save(submission);
+            statusPublisher.publishFinal(submission, partialResults);
             webhookSender.sendAsync(submission);
 
         } catch (IOException e) {
@@ -168,9 +197,9 @@ public class JudgeService {
             submission.setErrorMessage("Internal judge error: " + e.getMessage());
             submission.setFinishedAt(LocalDateTime.now());
             submissionRepository.save(submission);
+            statusPublisher.publishFinal(submission, List.of());
         } finally {
             dockerRunner.cleanup(submissionId);
-            queueService.markDone(submissionId);
         }
     }
 
@@ -239,6 +268,7 @@ public class JudgeService {
     }
 
     private String evaluate(RunResult rr, TestCase tc, Problem problem, String workDir) {
+        if (rr.isSystemError())    return "SE";
         if (rr.isTimedOut())       return "TLE";
         if (rr.isMemoryExceeded()) return "MLE";
         if (rr.getExitCode() != 0) return "RE";

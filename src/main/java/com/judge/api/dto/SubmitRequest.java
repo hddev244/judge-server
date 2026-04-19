@@ -19,4 +19,6 @@ public class SubmitRequest {
 
     @URL(message = "callbackUrl must be a valid URL")
     private String callbackUrl;
+
+    private Long contestId;
 }
