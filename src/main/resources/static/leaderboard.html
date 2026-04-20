@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Judge — Leaderboard</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0f1117;--surface:#1a1d27;--surface2:#222536;--border:#2e3148;
+  --accent:#6c63ff;--accent2:#00d4aa;--text:#e2e4f0;--muted:#8b8fa8;
+  --green:#22c55e;--yellow:#f59e0b;--red:#ef4444;--blue:#3b82f6;--purple:#a855f7;
+  --gold:#f59e0b;--silver:#94a3b8;--bronze:#c97c4a;
+  --mono:'JetBrains Mono','Fira Code','Consolas',monospace;
+}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);line-height:1.6;min-height:100vh;display:flex;flex-direction:column}
+
+/* Topbar */
+.topbar{display:flex;align-items:center;gap:12px;padding:0 24px;height:52px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0}
+.brand{display:flex;align-items:center;gap:8px;font-weight:700;font-size:15px;text-decoration:none;color:var(--text)}
+.brand-icon{width:28px;height:28px;background:linear-gradient(135deg,var(--accent),var(--accent2));border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:14px}
+.topbar-nav{display:flex;align-items:center;gap:4px;margin-left:16px}
+.topbar-nav a{font-size:13px;color:var(--muted);text-decoration:none;padding:5px 10px;border-radius:7px;transition:all .15s}
+.topbar-nav a:hover{background:var(--surface2);color:var(--text)}
+.topbar-nav a.active{background:rgba(108,99,255,.15);color:var(--accent)}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:8px}
+.key-wrap{display:flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:5px 10px}
+.key-wrap label{font-size:11px;color:var(--muted);white-space:nowrap}
+.key-wrap input{background:transparent;border:none;outline:none;color:var(--text);font-size:12px;font-family:var(--mono);width:210px}
+
+/* Layout */
+.page{flex:1;display:flex;gap:0;max-width:1200px;width:100%;margin:0 auto;padding:32px 24px}
+
+/* Left — Leaderboard */
+.lb-main{flex:1;min-width:0}
+.lb-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px}
+.lb-title{font-size:22px;font-weight:800}
+.lb-title span{background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.lb-meta{font-size:13px;color:var(--muted);margin-top:2px}
+.lb-controls{display:flex;gap:8px;align-items:center}
+.lb-controls input{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 12px;color:var(--text);font-size:13px;outline:none;width:200px;transition:border-color .15s}
+.lb-controls input:focus{border-color:var(--accent)}
+.lb-controls input::placeholder{color:var(--muted)}
+.refresh-btn{display:flex;align-items:center;gap:6px;padding:6px 14px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--muted);font-size:13px;cursor:pointer;transition:all .15s;white-space:nowrap}
+.refresh-btn:hover{background:var(--surface2);color:var(--text)}
+.refresh-btn.spinning svg{animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Top 3 podium */
+.podium{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:28px}
+.podium-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px 16px;text-align:center;position:relative;overflow:hidden;transition:transform .15s}
+.podium-card:hover{transform:translateY(-2px)}
+.podium-card.rank-1{border-color:rgba(245,158,11,.4);background:linear-gradient(160deg,rgba(245,158,11,.08),var(--surface))}
+.podium-card.rank-2{border-color:rgba(148,163,184,.3)}
+.podium-card.rank-3{border-color:rgba(201,124,74,.3)}
+.podium-rank{font-size:28px;margin-bottom:6px}
+.podium-user{font-size:15px;font-weight:700;margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.podium-score{font-size:22px;font-weight:800;margin-bottom:2px}
+.rank-1 .podium-score{color:var(--gold)}
+.rank-2 .podium-score{color:var(--silver)}
+.rank-3 .podium-score{color:var(--bronze)}
+.podium-solved{font-size:12px;color:var(--muted)}
+.podium-accent{position:absolute;top:0;left:0;right:0;height:3px}
+.rank-1 .podium-accent{background:linear-gradient(90deg,var(--gold),#fde68a)}
+.rank-2 .podium-accent{background:linear-gradient(90deg,var(--silver),#cbd5e1)}
+.rank-3 .podium-accent{background:linear-gradient(90deg,var(--bronze),#d97706)}
+
+/* Table */
+.lb-table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.lb-table{width:100%;border-collapse:collapse}
+.lb-table th{text-align:left;padding:11px 16px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);border-bottom:1px solid var(--border);white-space:nowrap}
+.lb-table td{padding:12px 16px;border-bottom:1px solid var(--border);font-size:14px;vertical-align:middle}
+.lb-table tr:last-child td{border-bottom:none}
+.lb-table tbody tr{transition:background .12s;cursor:pointer}
+.lb-table tbody tr:hover{background:var(--surface2)}
+.lb-table tbody tr.highlighted td{background:rgba(108,99,255,.1)}
+
+.rank-cell{font-family:var(--mono);font-weight:700;font-size:13px;width:52px;color:var(--muted)}
+.rank-cell.top1{color:var(--gold)}
+.rank-cell.top2{color:var(--silver)}
+.rank-cell.top3{color:var(--bronze)}
+.user-cell{display:flex;align-items:center;gap:10px}
+.avatar{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0}
+.user-name{font-weight:600;font-size:14px}
+.score-cell{font-family:var(--mono);font-weight:700;font-size:14px;color:var(--accent2)}
+.solved-cell{font-family:var(--mono);color:var(--green)}
+.rate-cell{font-family:var(--mono);font-size:13px;color:var(--muted)}
+.bar-wrap{width:80px;height:6px;background:var(--surface2);border-radius:3px;overflow:hidden}
+.bar-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:3px;transition:width .4s ease}
+
+/* Right — User stats panel */
+.stats-panel{width:300px;margin-left:24px;flex-shrink:0}
+.stats-panel.hidden{display:none}
+.stats-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:22px;position:sticky;top:24px}
+.stats-close{float:right;background:transparent;border:none;color:var(--muted);font-size:18px;cursor:pointer;padding:0 0 4px 8px;line-height:1}
+.stats-close:hover{color:var(--text)}
+.stats-rank-badge{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;padding:3px 10px;border-radius:20px;background:rgba(108,99,255,.2);color:var(--accent);margin-bottom:14px}
+.stats-user{font-size:18px;font-weight:800;margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.stats-score{font-size:28px;font-weight:800;color:var(--accent2);margin-bottom:16px}
+.stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:18px}
+.stat-item{background:var(--surface2);border-radius:10px;padding:12px 14px}
+.stat-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:3px}
+.stat-val{font-size:18px;font-weight:700}
+.stat-val.green{color:var(--green)}
+.stat-val.blue{color:var(--blue)}
+.stat-val.yellow{color:var(--yellow)}
+
+.stats-section{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin:14px 0 8px}
+.lang-bars{display:flex;flex-direction:column;gap:7px}
+.lang-row{display:flex;align-items:center;gap:8px;font-size:13px}
+.lang-name{width:54px;color:var(--muted);font-size:12px}
+.lang-bar-wrap{flex:1;height:6px;background:var(--surface2);border-radius:3px;overflow:hidden}
+.lang-bar{height:100%;border-radius:3px;transition:width .4s ease}
+.lang-count{font-size:12px;color:var(--muted);width:24px;text-align:right;font-family:var(--mono)}
+
+.recent-list{display:flex;flex-direction:column;gap:6px}
+.recent-item{display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--surface2);border-radius:8px;font-size:12px;cursor:pointer;text-decoration:none;color:var(--text)}
+.recent-item:hover{background:var(--border)}
+.recent-verdict{font-family:var(--mono);font-weight:700;font-size:11px;min-width:30px}
+.recent-title{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)}
+.recent-lang{font-size:11px;color:var(--muted)}
+
+/* Loading / empty */
+.skeleton{display:flex;flex-direction:column;gap:8px;padding:12px 16px}
+.skel-row{height:44px;border-radius:8px;background:linear-gradient(90deg,var(--surface2) 25%,var(--border) 50%,var(--surface2) 75%);background-size:400% 100%;animation:shimmer 1.4s infinite}
+@keyframes shimmer{0%{background-position:100% 0}100%{background-position:-100% 0}}
+.empty{padding:48px 24px;text-align:center;color:var(--muted);font-size:14px}
+.empty-icon{font-size:40px;margin-bottom:12px}
+
+/* Toast */
+.toast{position:fixed;bottom:24px;right:24px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 16px;font-size:13px;box-shadow:0 4px 20px rgba(0,0,0,.4);opacity:0;transform:translateY(8px);transition:all .25s;pointer-events:none;z-index:99}
+.toast.show{opacity:1;transform:translateY(0)}
+
+.verdict-AC{color:var(--green)}.verdict-WA{color:var(--red)}.verdict-TLE{color:var(--yellow)}.verdict-MLE{color:var(--purple)}.verdict-RE{color:var(--red)}.verdict-CE{color:var(--muted)}.verdict-SE{color:var(--muted)}
+
+::-webkit-scrollbar{width:5px;height:5px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+@media(max-width:900px){.stats-panel{display:none!important}.podium{grid-template-columns:1fr}}
+@media(max-width:640px){.page{padding:16px 12px}.lb-controls input{width:140px}}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <a class="brand" href="/solve.html"><div class="brand-icon">⚖️</div>Judge Server</a>
+  <nav class="topbar-nav">
+    <a href="/solve.html">Làm bài</a>
+    <a href="/leaderboard.html" class="active">Leaderboard</a>
+    <a href="/docs.html">API Docs</a>
+    <a href="/admin.html">Admin</a>
+  </nav>
+  <div class="topbar-right">
+    <div class="key-wrap">
+      <label>API Key</label>
+      <input id="api-key" type="password" placeholder="sk_..." autocomplete="off"/>
+    </div>
+  </div>
+</div>
+
+<div class="page">
+  <!-- Main leaderboard -->
+  <div class="lb-main">
+    <div class="lb-header">
+      <div>
+        <div class="lb-title">🏆 <span>Leaderboard</span></div>
+        <div class="lb-meta" id="lb-meta">Đang tải...</div>
+      </div>
+      <div class="lb-controls">
+        <input id="search" placeholder="Tìm theo username..." oninput="filterTable()"/>
+        <button class="refresh-btn" id="refresh-btn" onclick="loadLeaderboard()">
+          <svg id="refresh-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+          Làm mới
+        </button>
+      </div>
+    </div>
+
+    <!-- Podium top 3 -->
+    <div class="podium" id="podium" style="display:none"></div>
+
+    <!-- Table -->
+    <div class="lb-table-wrap">
+      <div class="skeleton" id="skeleton">
+        <div class="skel-row"></div><div class="skel-row"></div><div class="skel-row"></div>
+        <div class="skel-row"></div><div class="skel-row"></div><div class="skel-row"></div>
+      </div>
+      <table class="lb-table" id="lb-table" style="display:none">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Người dùng</th>
+            <th>Điểm</th>
+            <th>Đã giải</th>
+            <th>Tỷ lệ AC</th>
+            <th style="width:100px">Tiến độ</th>
+          </tr>
+        </thead>
+        <tbody id="lb-body"></tbody>
+      </table>
+      <div class="empty" id="lb-empty" style="display:none">
+        <div class="empty-icon">📭</div>
+        Không có kết quả
+      </div>
+    </div>
+  </div>
+
+  <!-- Right stats panel -->
+  <aside class="stats-panel hidden" id="stats-panel">
+    <div class="stats-card">
+      <button class="stats-close" onclick="closeStats()">✕</button>
+      <div class="stats-rank-badge" id="sp-rank">—</div>
+      <div class="stats-user" id="sp-user">—</div>
+      <div class="stats-score" id="sp-score">—</div>
+
+      <div class="stats-grid" id="sp-grid"></div>
+
+      <div class="stats-section">Ngôn ngữ</div>
+      <div class="lang-bars" id="sp-langs"></div>
+
+      <div class="stats-section" style="margin-top:16px">Submission gần đây</div>
+      <div class="recent-list" id="sp-recent"></div>
+    </div>
+  </aside>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const BASE = '';
+let allRows = [];
+let maxSolved = 1;
+
+const AVATAR_COLORS = [
+  '#6c63ff','#00d4aa','#3b82f6','#f59e0b','#22c55e','#a855f7','#ef4444','#06b6d4','#ec4899','#84cc16'
+];
+
+function avatarColor(name) {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xfffffff;
+  return AVATAR_COLORS[h % AVATAR_COLORS.length];
+}
+
+function apiKey() {
+  return document.getElementById('api-key').value.trim() ||
+         localStorage.getItem('judge_api_key') || '';
+}
+
+function headers() {
+  const k = apiKey();
+  return k ? { 'X-API-Key': k } : {};
+}
+
+function toast(msg, dur = 2500) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), dur);
+}
+
+function setRefreshSpinning(v) {
+  document.getElementById('refresh-btn').classList.toggle('spinning', v);
+}
+
+async function loadLeaderboard() {
+  setRefreshSpinning(true);
+  document.getElementById('skeleton').style.display = '';
+  document.getElementById('lb-table').style.display = 'none';
+  document.getElementById('lb-empty').style.display = 'none';
+  document.getElementById('podium').style.display = 'none';
+
+  try {
+    const res = await fetch(`${BASE}/api/v1/leaderboard?limit=200&offset=0`, { headers: headers() });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    allRows = data;
+    maxSolved = Math.max(1, ...data.map(r => r.solvedCount || 0));
+    renderTable(data);
+    renderPodium(data.slice(0, 3));
+    document.getElementById('lb-meta').textContent =
+      `${data.length} người dùng · Cập nhật lúc ${new Date().toLocaleTimeString('vi-VN')}`;
+  } catch (e) {
+    toast('Không thể tải leaderboard: ' + e.message);
+    document.getElementById('lb-meta').textContent = 'Lỗi khi tải dữ liệu';
+  } finally {
+    setRefreshSpinning(false);
+    document.getElementById('skeleton').style.display = 'none';
+  }
+}
+
+function renderPodium(top) {
+  if (!top.length) return;
+  const medals = ['🥇','🥈','🥉'];
+  const wrap = document.getElementById('podium');
+  // order: 2nd, 1st, 3rd for visual podium
+  const order = top.length === 3 ? [top[1], top[0], top[2]] : top;
+  const rankClass = top.length === 3 ? [2, 1, 3] : top.map((_,i) => i+1);
+
+  wrap.innerHTML = order.map((u, i) => {
+    const rank = rankClass[i];
+    const medal = medals[rank - 1] ?? rank;
+    return `<div class="podium-card rank-${rank}" onclick="openStats('${esc(u.userRef)}', ${rank})">
+      <div class="podium-accent"></div>
+      <div class="podium-rank">${medal}</div>
+      <div class="podium-user">${esc(u.userRef)}</div>
+      <div class="podium-score">${u.totalScore ?? u.solvedCount ?? 0}</div>
+      <div class="podium-solved">${u.solvedCount ?? 0} bài đã giải</div>
+    </div>`;
+  }).join('');
+  wrap.style.display = 'grid';
+}
+
+function renderTable(rows) {
+  const tbody = document.getElementById('lb-body');
+  if (!rows.length) {
+    document.getElementById('lb-empty').style.display = '';
+    return;
+  }
+  tbody.innerHTML = rows.map((r, i) => {
+    const rank = r.rank ?? (i + 1);
+    const rankCls = rank === 1 ? 'top1' : rank === 2 ? 'top2' : rank === 3 ? 'top3' : '';
+    const rate = r.acceptanceRate != null ? r.acceptanceRate.toFixed(1) : '—';
+    const barPct = Math.round((r.solvedCount / maxSolved) * 100);
+    const color = avatarColor(r.userRef);
+    const initials = r.userRef.slice(0, 2).toUpperCase();
+    return `<tr onclick="openStats('${esc(r.userRef)}', ${rank})">
+      <td class="rank-cell ${rankCls}">${rank <= 3 ? ['🥇','🥈','🥉'][rank-1] : rank}</td>
+      <td><div class="user-cell">
+        <div class="avatar" style="background:${color}20;color:${color}">${initials}</div>
+        <span class="user-name">${esc(r.userRef)}</span>
+      </div></td>
+      <td class="score-cell">${r.totalScore ?? r.solvedCount ?? 0}</td>
+      <td class="solved-cell">${r.solvedCount ?? 0}</td>
+      <td class="rate-cell">${rate}%</td>
+      <td><div class="bar-wrap"><div class="bar-fill" style="width:${barPct}%"></div></div></td>
+    </tr>`;
+  }).join('');
+  document.getElementById('lb-table').style.display = '';
+}
+
+function filterTable() {
+  const q = document.getElementById('search').value.trim().toLowerCase();
+  renderTable(q ? allRows.filter(r => r.userRef.toLowerCase().includes(q)) : allRows);
+}
+
+async function openStats(userRef, rank) {
+  const panel = document.getElementById('stats-panel');
+  panel.classList.remove('hidden');
+  document.getElementById('sp-user').textContent = userRef;
+  document.getElementById('sp-rank').textContent = `# ${rank}`;
+  document.getElementById('sp-score').textContent = '...';
+  document.getElementById('sp-grid').innerHTML = '';
+  document.getElementById('sp-langs').innerHTML = '';
+  document.getElementById('sp-recent').innerHTML = '';
+
+  // highlight row
+  document.querySelectorAll('#lb-body tr').forEach(tr => {
+    tr.classList.toggle('highlighted', tr.querySelector('.user-name')?.textContent === userRef);
+  });
+
+  try {
+    const res = await fetch(`${BASE}/api/v1/users/${encodeURIComponent(userRef)}/stats`);
+    if (!res.ok) throw new Error('Không có dữ liệu');
+    const s = await res.json();
+
+    const lb = allRows.find(r => r.userRef === userRef);
+    document.getElementById('sp-score').textContent = lb?.totalScore ?? s.solvedCount ?? 0;
+
+    document.getElementById('sp-grid').innerHTML = `
+      <div class="stat-item"><div class="stat-label">Đã giải</div><div class="stat-val green">${s.solvedCount ?? 0}</div></div>
+      <div class="stat-item"><div class="stat-label">Tổng nộp</div><div class="stat-val blue">${s.totalSubmissions ?? 0}</div></div>
+      <div class="stat-item"><div class="stat-label">Tỷ lệ AC</div><div class="stat-val yellow">${s.acceptanceRate != null ? s.acceptanceRate.toFixed(1) + '%' : '—'}</div></div>
+      <div class="stat-item"><div class="stat-label">Hạng</div><div class="stat-val">#${rank}</div></div>`;
+
+    // language breakdown
+    const langs = s.languageBreakdown ?? {};
+    const totalLang = Object.values(langs).reduce((a,b) => a+b, 0) || 1;
+    const langColors = { cpp: '#80cbc4', java: '#f59e0b', python: '#3b82f6' };
+    document.getElementById('sp-langs').innerHTML = Object.entries(langs)
+      .sort((a,b) => b[1]-a[1])
+      .map(([lang, cnt]) => `
+        <div class="lang-row">
+          <span class="lang-name">${lang}</span>
+          <div class="lang-bar-wrap"><div class="lang-bar" style="width:${Math.round(cnt/totalLang*100)}%;background:${langColors[lang]??'var(--accent)'}"></div></div>
+          <span class="lang-count">${cnt}</span>
+        </div>`).join('') || '<span style="font-size:13px;color:var(--muted)">Chưa có</span>';
+
+    // recent submissions
+    const recent = (s.recentSubmissions ?? []).slice(0, 6);
+    document.getElementById('sp-recent').innerHTML = recent.length
+      ? recent.map(r => `
+          <div class="recent-item">
+            <span class="recent-verdict verdict-${r.status}">${r.status}</span>
+            <span class="recent-title">${esc(r.problemTitle ?? r.problemId ?? '—')}</span>
+            <span class="recent-lang">${r.language ?? ''}</span>
+          </div>`).join('')
+      : '<span style="font-size:13px;color:var(--muted)">Chưa có submission</span>';
+
+  } catch(e) {
+    document.getElementById('sp-score').textContent = '—';
+    toast('Không thể tải stats: ' + e.message);
+  }
+}
+
+function closeStats() {
+  document.getElementById('stats-panel').classList.add('hidden');
+  document.querySelectorAll('#lb-body tr').forEach(tr => tr.classList.remove('highlighted'));
+}
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// persist API key
+document.getElementById('api-key').addEventListener('change', e => {
+  if (e.target.value) localStorage.setItem('judge_api_key', e.target.value);
+});
+
+window.addEventListener('load', () => {
+  const saved = localStorage.getItem('judge_api_key');
+  if (saved) document.getElementById('api-key').value = saved;
+  loadLeaderboard();
+  // auto-refresh every 5 minutes
+  setInterval(loadLeaderboard, 5 * 60 * 1000);
+});
+</script>
+</body>
+</html>
