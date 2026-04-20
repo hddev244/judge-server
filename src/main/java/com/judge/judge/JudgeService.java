@@ -13,6 +13,7 @@ import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import com.judge.webhook.WebhookSender;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.cache.CacheManager;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,6 +37,7 @@ public class JudgeService {
     private final WebhookSender webhookSender;
     private final JudgeConfig judgeConfig;
     private final JudgeStatusPublisher statusPublisher;
+    private final CacheManager cacheManager;
 
     public JudgeService(SubmissionRepository submissionRepository,
                         TestCaseRepository testCaseRepository,
@@ -47,7 +49,8 @@ public class JudgeService {
                         JudgeQueueService queueService,
                         WebhookSender webhookSender,
                         JudgeConfig judgeConfig,
-                        JudgeStatusPublisher statusPublisher) {
+                        JudgeStatusPublisher statusPublisher,
+                        CacheManager cacheManager) {
         this.submissionRepository = submissionRepository;
         this.testCaseRepository = testCaseRepository;
         this.submissionResultRepository = submissionResultRepository;
@@ -59,6 +62,12 @@ public class JudgeService {
         this.webhookSender = webhookSender;
         this.judgeConfig = judgeConfig;
         this.statusPublisher = statusPublisher;
+        this.cacheManager = cacheManager;
+    }
+
+    private void evictLeaderboardCache() {
+        var cache = cacheManager.getCache("leaderboard");
+        if (cache != null) cache.clear();
     }
 
     @Transactional
@@ -190,6 +199,7 @@ public class JudgeService {
             submissionRepository.save(submission);
             statusPublisher.publishFinal(submission, partialResults);
             webhookSender.sendAsync(submission);
+            if (submission.getUserRef() != null) evictLeaderboardCache();
 
         } catch (IOException e) {
             log.error("Judge error for submission {}", submissionId, e);
