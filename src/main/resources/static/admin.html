@@ -189,6 +189,7 @@ code{font-family:var(--mono);font-size:12px;background:var(--surface2);padding:2
     <div class="nav-item" data-page="problems"><span class="ni">📚</span>Problems</div>
     <div class="nav-item" data-page="submissions"><span class="ni">📤</span>Submissions</div>
     <div class="nav-item" data-page="apikeys"><span class="ni">🔑</span>API Keys</div>
+    <div class="nav-item" data-page="contests"><span class="ni">🏅</span>Contests</div>
   </nav>
   <div class="sidebar-foot">Judge Server v1 · <a href="/docs.html" target="_blank" style="color:var(--accent)">Docs</a> · <a href="/languages.html" target="_blank" style="color:var(--accent2)">Languages</a> · <a href="/leaderboard.html" target="_blank" style="color:#f59e0b">Leaderboard</a></div>
 </aside>
@@ -250,6 +251,20 @@ code{font-family:var(--mono);font-size:12px;background:var(--surface2);padding:2
       </table>
     </div>
     <div class="pagination" id="subs-pagination"></div>
+  </div>
+
+  <!-- Contests -->
+  <div class="page" id="page-contests">
+    <div class="page-header">
+      <div><div class="page-title">Contests</div><div class="page-sub">Quản lý kỳ thi</div></div>
+      <button class="btn btn-primary" onclick="openModal('modal-create-contest')">+ Tạo contest</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>ID</th><th>Slug</th><th>Title</th><th>Thời gian</th><th>Status</th><th>Problems</th><th>Công khai</th><th>Actions</th></tr></thead>
+        <tbody id="contests-body"><tr><td colspan="8"><div class="empty"><p>Đang tải...</p></div></td></tr></tbody>
+      </table>
+    </div>
   </div>
 
   <!-- API Keys -->
@@ -516,6 +531,70 @@ code{font-family:var(--mono);font-size:12px;background:var(--surface2);padding:2
   </div>
 </div>
 
+<!-- Create Contest -->
+<div class="modal-backdrop" id="modal-create-contest">
+  <div class="modal">
+    <h3>🏅 Tạo Contest mới</h3>
+    <div class="form-group"><label>Slug <span style="color:var(--red)">*</span></label><input id="cc-slug" placeholder="icpc-2025"/></div>
+    <div class="form-group"><label>Title <span style="color:var(--red)">*</span></label><input id="cc-title" placeholder="ICPC 2025 Regional"/></div>
+    <div class="form-group"><label>Description</label><textarea id="cc-desc" placeholder="Mô tả kỳ thi..."></textarea></div>
+    <div class="form-row">
+      <div class="form-group"><label>Bắt đầu <span style="color:var(--red)">*</span></label><input id="cc-start" type="datetime-local"/></div>
+      <div class="form-group"><label>Kết thúc <span style="color:var(--red)">*</span></label><input id="cc-end" type="datetime-local"/></div>
+    </div>
+    <div class="form-group">
+      <label class="form-check"><input type="checkbox" id="cc-public"/> Công khai (hiển thị trên trang contests)</label>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-create-contest')">Hủy</button>
+      <button class="btn btn-primary" id="btn-create-contest" onclick="createContest()">Tạo</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Contest -->
+<div class="modal-backdrop" id="modal-edit-contest">
+  <div class="modal">
+    <h3>✏️ Chỉnh sửa Contest</h3>
+    <input type="hidden" id="ec-id"/>
+    <div class="form-group"><label>Slug <span style="color:var(--red)">*</span></label><input id="ec-slug" placeholder="icpc-2025"/></div>
+    <div class="form-group"><label>Title <span style="color:var(--red)">*</span></label><input id="ec-title"/></div>
+    <div class="form-group"><label>Description</label><textarea id="ec-desc"></textarea></div>
+    <div class="form-row">
+      <div class="form-group"><label>Bắt đầu <span style="color:var(--red)">*</span></label><input id="ec-start" type="datetime-local"/></div>
+      <div class="form-group"><label>Kết thúc <span style="color:var(--red)">*</span></label><input id="ec-end" type="datetime-local"/></div>
+    </div>
+    <div class="form-group">
+      <label class="form-check"><input type="checkbox" id="ec-public"/> Công khai</label>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-edit-contest')">Hủy</button>
+      <button class="btn btn-primary" onclick="updateContest()">Lưu</button>
+    </div>
+  </div>
+</div>
+
+<!-- Manage Contest Problems -->
+<div class="modal-backdrop" id="modal-contest-problems">
+  <div class="modal" style="max-width:640px">
+    <h3>📚 Problems — <span id="cp-contest-title"></span></h3>
+    <input type="hidden" id="cp-contest-id"/>
+    <div id="cp-list" style="margin-bottom:16px"></div>
+    <div style="border-top:1px solid var(--border);padding-top:16px">
+      <div style="font-size:13px;font-weight:700;margin-bottom:12px">Thêm problem</div>
+      <div class="form-row">
+        <div class="form-group"><label>Problem ID <span style="color:var(--red)">*</span></label><input id="cp-pid" type="number" placeholder="1"/></div>
+        <div class="form-group"><label>Alias <span style="font-size:11px;color:var(--muted)">(A, B, C…)</span></label><input id="cp-alias" placeholder="A" maxlength="10"/></div>
+      </div>
+      <div class="form-group"><label>Order Index</label><input id="cp-order" type="number" value="0"/></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-contest-problems')">Đóng</button>
+      <button class="btn btn-primary" onclick="addProblemToContest()">+ Thêm</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <script>
@@ -548,6 +627,7 @@ function loadCurrentPage() {
   if (active === 'problems')    loadProblems(0);
   if (active === 'submissions') loadSubmissions(0);
   if (active === 'apikeys')     loadApiKeys();
+  if (active === 'contests')    loadContests();
 }
 
 // ─── API helper ─────────────────────────────────────────────────
@@ -1309,6 +1389,187 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 });
+
+// ─── Contests ────────────────────────────────────────────────────
+function contestStatusBadge(s) {
+  if (s === 'ONGOING')  return '<span class="badge badge-green">ONGOING</span>';
+  if (s === 'UPCOMING') return '<span class="badge badge-blue">UPCOMING</span>';
+  return '<span class="badge badge-gray">ENDED</span>';
+}
+
+function fmtLocalDt(s) {
+  if (!s) return '—';
+  return new Date(s).toLocaleString('vi-VN', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+}
+
+function toLocalDtInputValue(isoStr) {
+  if (!isoStr) return '';
+  const d = new Date(isoStr);
+  const pad = n => String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function localDtToIso(val) {
+  if (!val) return null;
+  return val.includes('T') ? val + ':00' : val;
+}
+
+async function loadContests() {
+  if (!apiKey) return;
+  try {
+    const list = await api('/api/v1/contests');
+    const rows = list.length ? list.map(c => `
+      <tr>
+        <td>${c.id}</td>
+        <td><code>${c.slug}</code></td>
+        <td>${escHtml(c.title)}</td>
+        <td style="font-size:12px;color:var(--muted)">${fmtLocalDt(c.startTime)}<br>${fmtLocalDt(c.endTime)}</td>
+        <td>${contestStatusBadge(c.status)}</td>
+        <td><span class="badge badge-blue">${(c.problems||[]).length}</span></td>
+        <td>${c.isPublic ? '<span class="badge badge-green">Có</span>' : '<span class="badge badge-gray">Không</span>'}</td>
+        <td style="display:flex;gap:5px;flex-wrap:wrap">
+          <button class="btn btn-ghost btn-sm" onclick="openEditContest(${c.id},'${escAttr(c.slug)}','${escAttr(c.title)}','${escAttr(c.description||'')}','${c.startTime||''}','${c.endTime||''}',${c.isPublic})">✏️</button>
+          <button class="btn btn-ghost btn-sm" onclick="openContestProblems(${c.id},'${escAttr(c.title)}',${JSON.stringify(c.problems||[])})">📚</button>
+          <a href="/solve.html?contest=${c.slug}" target="_blank" class="btn btn-ghost btn-sm">🔗</a>
+        </td>
+      </tr>`).join('')
+      : '<tr><td colspan="8"><div class="empty"><div class="empty-icon">🏅</div><p>Chưa có contest nào</p></div></td></tr>';
+    document.getElementById('contests-body').innerHTML = rows;
+  } catch(e) { toast('Lỗi tải contests: ' + e.message, 'error'); }
+}
+
+function escAttr(s) {
+  return String(s||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\n/g,'\\n');
+}
+
+async function createContest() {
+  const btn = document.getElementById('btn-create-contest');
+  btn.disabled = true; btn.innerHTML = '<span class="spin"></span>';
+  try {
+    await api('/api/v1/admin/contests', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        slug: document.getElementById('cc-slug').value.trim(),
+        title: document.getElementById('cc-title').value.trim(),
+        description: document.getElementById('cc-desc').value.trim(),
+        startTime: localDtToIso(document.getElementById('cc-start').value),
+        endTime: localDtToIso(document.getElementById('cc-end').value),
+        isPublic: document.getElementById('cc-public').checked
+      })
+    });
+    closeModal('modal-create-contest');
+    ['cc-slug','cc-title','cc-desc'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('cc-start').value = '';
+    document.getElementById('cc-end').value = '';
+    document.getElementById('cc-public').checked = false;
+    toast('Tạo contest thành công!', 'success');
+    loadContests();
+  } catch(e) { toast('Lỗi: ' + e.message, 'error'); }
+  finally { btn.disabled = false; btn.textContent = 'Tạo'; }
+}
+
+function openEditContest(id, slug, title, desc, startTime, endTime, isPublic) {
+  document.getElementById('ec-id').value = id;
+  document.getElementById('ec-slug').value = slug;
+  document.getElementById('ec-title').value = title;
+  document.getElementById('ec-desc').value = (desc||'').replace(/\\n/g,'\n');
+  document.getElementById('ec-start').value = toLocalDtInputValue(startTime);
+  document.getElementById('ec-end').value   = toLocalDtInputValue(endTime);
+  document.getElementById('ec-public').checked = !!isPublic;
+  openModal('modal-edit-contest');
+}
+
+async function updateContest() {
+  const id = document.getElementById('ec-id').value;
+  try {
+    await api(`/api/v1/admin/contests/${id}`, {
+      method: 'PUT',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        slug: document.getElementById('ec-slug').value.trim(),
+        title: document.getElementById('ec-title').value.trim(),
+        description: document.getElementById('ec-desc').value.trim(),
+        startTime: localDtToIso(document.getElementById('ec-start').value),
+        endTime: localDtToIso(document.getElementById('ec-end').value),
+        isPublic: document.getElementById('ec-public').checked
+      })
+    });
+    closeModal('modal-edit-contest');
+    toast('Cập nhật contest thành công!', 'success');
+    loadContests();
+  } catch(e) { toast('Lỗi: ' + e.message, 'error'); }
+}
+
+let currentContestId = null;
+
+function openContestProblems(contestId, title, problems) {
+  currentContestId = contestId;
+  document.getElementById('cp-contest-id').value = contestId;
+  document.getElementById('cp-contest-title').textContent = title;
+  document.getElementById('cp-pid').value = '';
+  document.getElementById('cp-alias').value = '';
+  document.getElementById('cp-order').value = problems.length;
+  renderContestProblemList(contestId, problems);
+  openModal('modal-contest-problems');
+}
+
+function renderContestProblemList(contestId, problems) {
+  const html = problems.length
+    ? `<div class="table-wrap"><table>
+        <thead><tr><th>Order</th><th>Alias</th><th>Problem</th><th></th></tr></thead>
+        <tbody>${problems.map(p => `
+          <tr>
+            <td>${p.orderIndex}</td>
+            <td><span class="badge badge-blue">${escHtml(p.alias||'—')}</span></td>
+            <td>${escHtml(p.title)} <code style="font-size:11px">${p.slug}</code></td>
+            <td><button class="btn btn-danger btn-sm" onclick="removeProblemFromContest(${contestId},${p.problemId})">🗑</button></td>
+          </tr>`).join('')}
+        </tbody></table></div>`
+    : '<div class="alert alert-info" style="font-size:12px">Chưa có problem nào trong contest này.</div>';
+  document.getElementById('cp-list').innerHTML = html;
+}
+
+async function addProblemToContest() {
+  const cid = document.getElementById('cp-contest-id').value;
+  const pid = document.getElementById('cp-pid').value.trim();
+  if (!pid) { toast('Nhập Problem ID', 'error'); return; }
+  try {
+    await api(`/api/v1/admin/contests/${cid}/problems`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        problemId: +pid,
+        alias: document.getElementById('cp-alias').value.trim() || null,
+        orderIndex: +document.getElementById('cp-order').value
+      })
+    });
+    toast('Thêm problem thành công!', 'success');
+    document.getElementById('cp-pid').value = '';
+    document.getElementById('cp-alias').value = '';
+    await refreshContestProblems(+cid);
+  } catch(e) { toast('Lỗi: ' + e.message, 'error'); }
+}
+
+async function removeProblemFromContest(contestId, problemId) {
+  if (!confirm('Gỡ problem này khỏi contest?')) return;
+  try {
+    await api(`/api/v1/admin/contests/${contestId}/problems/${problemId}`, { method: 'DELETE' });
+    toast('Đã gỡ problem', 'success');
+    await refreshContestProblems(contestId);
+  } catch(e) { toast('Lỗi: ' + e.message, 'error'); }
+}
+
+async function refreshContestProblems(contestId) {
+  try {
+    const contests = await api('/api/v1/contests');
+    const c = contests.find(x => x.id === contestId);
+    if (c) {
+      renderContestProblemList(contestId, c.problems || []);
+      document.getElementById('cp-order').value = (c.problems||[]).length;
+    }
+  } catch(e) {}
+}
 
 // ─── Boot ────────────────────────────────────────────────────────
 if (apiKey) loadDashboard();
