@@ -134,6 +134,8 @@ curl -X POST http://localhost:8080/api/v1/admin/problems/import \
   -F "file=@my-problem.zip"
 ```
 
+> Giới hạn mặc định: **50 MB** per file, 52 MB per request. Điều chỉnh qua `spring.servlet.multipart.max-file-size` trong `application.yml`.
+
 ## Contest Mode
 
 ```bash
@@ -270,6 +272,8 @@ int main(int argc, char* argv[]) {
 | `JUDGE_TESTCASE_BASE_PATH` | `/data/problems` | Lưu file test case |
 | `JUDGE_QUEUE_KEY` | `judge:queue` | Redis list key |
 | `SERVER_PORT` | `8080` | HTTP port |
+| `SPRING_SERVLET_MULTIPART_MAX_FILE_SIZE` | `50MB` | Giới hạn kích thước file upload (ZIP import) |
+| `SPRING_SERVLET_MULTIPART_MAX_REQUEST_SIZE` | `52MB` | Giới hạn kích thước request multipart |
 
 ## License
 

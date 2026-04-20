@@ -5,6 +5,11 @@ spring:
   application:
     name: judge-server
 
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 52MB
+
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/judgedb}
     username: ${DB_USER:judge}
