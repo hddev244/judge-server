@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Judge — Demo</title>
+<script src="https://cdn.jsdelivr.net/npm/marked@9/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.6.1/sockjs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0f1117;--surface:#1a1d27;--surface2:#222536;--border:#2e3148;
+  --accent:#6c63ff;--accent2:#00d4aa;--text:#e2e4f0;--muted:#8b8fa8;
+  --green:#22c55e;--yellow:#f59e0b;--red:#ef4444;--blue:#3b82f6;--purple:#a855f7;
+  --mono:'JetBrains Mono','Fira Code','Consolas',monospace;
+}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);line-height:1.6;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+
+/* Topbar */
+.topbar{display:flex;align-items:center;gap:10px;padding:0 20px;height:52px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0}
+.brand{display:flex;align-items:center;gap:8px;font-weight:700;font-size:15px}
+.brand-icon{width:28px;height:28px;background:linear-gradient(135deg,var(--accent),var(--accent2));border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:14px}
+.demo-badge{background:rgba(0,212,170,.15);color:var(--accent2);border:1px solid rgba(0,212,170,.3);font-size:11px;font-weight:700;padding:2px 8px;border-radius:5px;letter-spacing:.5px}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:8px}
+.topbar a{font-size:12px;color:var(--muted);text-decoration:none;padding:4px 8px;border-radius:6px;transition:all .15s}
+.topbar a:hover{background:var(--surface2);color:var(--text)}
+.key-wrap{display:flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:5px 10px}
+.key-wrap label{font-size:11px;color:var(--muted);white-space:nowrap}
+.key-wrap input{background:transparent;border:none;outline:none;color:var(--text);font-size:12px;font-family:var(--mono);width:200px}
+
+/* Identity bar */
+.identity-bar{display:flex;align-items:center;gap:12px;padding:10px 20px;background:linear-gradient(90deg,rgba(108,99,255,.08),rgba(0,212,170,.05));border-bottom:1px solid var(--border);flex-shrink:0}
+.identity-avatar{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;flex-shrink:0}
+.identity-info{flex:1;min-width:0}
+.identity-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:1px}
+.identity-user{font-size:14px;font-weight:700;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.identity-user code{font-family:var(--mono);font-size:13px;background:var(--surface2);padding:1px 8px;border-radius:5px;border:1px solid var(--border)}
+.identity-actions{display:flex;align-items:center;gap:6px}
+.id-btn{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:7px;font-size:12px;font-weight:600;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;font-family:inherit;transition:all .15s;white-space:nowrap}
+.id-btn:hover{background:var(--surface2);color:var(--text)}
+.id-btn.primary{background:rgba(108,99,255,.15);color:var(--accent);border-color:rgba(108,99,255,.3)}
+.id-btn.primary:hover{background:rgba(108,99,255,.25)}
+.rank-pill{display:inline-flex;align-items:center;gap:5px;background:rgba(34,197,94,.12);color:var(--green);border:1px solid rgba(34,197,94,.25);font-size:12px;font-weight:700;padding:3px 10px;border-radius:20px}
+
+/* Layout */
+.workspace{display:flex;flex:1;overflow:hidden}
+
+/* Problem list */
+.prob-list{width:230px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0}
+.prob-list-head{padding:12px 16px 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.prob-search{padding:8px;border-bottom:1px solid var(--border)}
+.prob-search input{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:5px 10px;color:var(--text);font-size:12px;outline:none}
+.prob-search input:focus{border-color:var(--accent)}
+.prob-search input::placeholder{color:var(--muted)}
+.prob-items{flex:1;overflow-y:auto;padding:6px}
+.prob-item{padding:9px 11px;border-radius:8px;cursor:pointer;transition:all .15s;margin-bottom:2px}
+.prob-item:hover{background:var(--surface2)}
+.prob-item.active{background:rgba(108,99,255,.15);border-left:3px solid var(--accent)}
+.prob-item.active .pi-title{color:var(--accent)}
+.pi-title{font-size:13px;font-weight:600;margin-bottom:3px}
+.pi-meta{font-size:11px;color:var(--muted);display:flex;gap:8px;align-items:center}
+.pi-diff{padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700}
+.diff-easy{background:rgba(34,197,94,.15);color:var(--green)}
+.diff-medium{background:rgba(245,158,11,.15);color:var(--yellow)}
+.diff-hard{background:rgba(239,68,68,.15);color:var(--red)}
+.prob-empty{padding:20px 16px;text-align:center;font-size:13px;color:var(--muted)}
+
+/* Content */
+.content{flex:1;display:flex;overflow:hidden}
+.prob-statement{width:44%;border-right:1px solid var(--border);overflow-y:auto;padding:22px 26px}
+.prob-statement.hidden{display:none}
+.prob-none{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:var(--muted);text-align:center;gap:10px}
+.prob-none .ni{font-size:40px}
+.prob-title{font-size:18px;font-weight:800;margin-bottom:6px}
+.prob-limits{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+.limit-badge{background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:3px 10px;font-size:12px;color:var(--muted)}
+.limit-badge span{color:var(--text);font-weight:600}
+.tags-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px}
+.tag{background:rgba(108,99,255,.12);color:var(--accent);border:1px solid rgba(108,99,255,.2);font-size:11px;font-weight:600;padding:2px 8px;border-radius:4px}
+.prob-desc{font-size:13.5px;line-height:1.8;color:#c8cce0}
+.prob-desc p{margin-bottom:10px}.prob-desc h1,.prob-desc h2,.prob-desc h3{margin:14px 0 6px;font-weight:700}.prob-desc ul,.prob-desc ol{padding-left:20px;margin-bottom:10px}.prob-desc code{font-family:var(--mono);background:var(--surface2);padding:1px 5px;border-radius:4px}.prob-desc pre{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;overflow-x:auto;margin-bottom:10px}.prob-desc pre code{background:none;padding:0}
+.prob-stats{display:flex;gap:16px;margin-bottom:16px;font-size:12px;color:var(--muted)}
+.prob-stats span{color:var(--text)}
+
+/* Editor */
+.editor-panel{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.editor-toolbar{display:flex;align-items:center;gap:8px;padding:9px 14px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0}
+.lang-select{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:5px 10px;color:var(--text);font-size:13px;font-family:inherit;outline:none;cursor:pointer}
+.editor-wrap{flex:1;overflow:hidden}
+textarea#code{width:100%;height:100%;background:var(--bg);border:none;outline:none;resize:none;color:#e2e4f0;font-family:var(--mono);font-size:13.5px;line-height:1.6;padding:16px 18px;tab-size:4}
+
+/* Result */
+.result-panel{height:200px;background:var(--surface);border-top:1px solid var(--border);flex-shrink:0;display:flex;flex-direction:column}
+.result-head{display:flex;align-items:center;gap:10px;padding:9px 16px;border-bottom:1px solid var(--border);flex-shrink:0}
+.result-head .label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted)}
+.result-body{flex:1;overflow-y:auto;padding:12px 16px}
+.verdict-row{display:flex;align-items:center;gap:14px;margin-bottom:10px}
+.verdict-big{font-size:22px;font-weight:900;letter-spacing:.5px}
+.verdict-big.AC{color:var(--green)}.verdict-big.WA{color:var(--red)}
+.verdict-big.TLE,.verdict-big.MLE{color:var(--yellow)}
+.verdict-big.CE,.verdict-big.RE,.verdict-big.SE{color:var(--purple)}
+.verdict-big.PENDING,.verdict-big.JUDGING{color:var(--muted)}
+.verdict-meta{font-size:13px;color:var(--muted)}
+.tc-results{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.tc-chip{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:6px;font-size:12px;font-weight:700}
+.tc-chip.AC{background:rgba(34,197,94,.15);color:var(--green)}
+.tc-chip.WA{background:rgba(239,68,68,.15);color:var(--red)}
+.tc-chip.TLE,.tc-chip.MLE{background:rgba(245,158,11,.15);color:var(--yellow)}
+.tc-chip.CE,.tc-chip.RE,.tc-chip.SE{background:rgba(168,85,247,.15);color:var(--purple)}
+.tc-chip.PENDING,.tc-chip.JUDGING{background:rgba(139,143,168,.15);color:var(--muted)}
+.err-box{background:var(--bg);border:1px solid rgba(239,68,68,.3);border-radius:8px;padding:10px 14px;font-family:var(--mono);font-size:12px;color:#fca5a5;white-space:pre-wrap;word-break:break-all;max-height:80px;overflow-y:auto;margin-top:8px}
+.result-idle{font-size:13px;color:var(--muted);padding:8px 0}
+
+/* AC celebration banner */
+.ac-banner{display:flex;align-items:center;justify-content:space-between;gap:12px;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);border-radius:10px;padding:10px 16px;margin-bottom:10px;flex-wrap:wrap}
+.ac-banner-left{display:flex;align-items:center;gap:10px}
+.ac-banner-text{font-size:13px;font-weight:600;color:var(--green)}
+.ac-banner-sub{font-size:12px;color:var(--muted)}
+.ac-lb-btn{display:inline-flex;align-items:center;gap:6px;padding:5px 14px;border-radius:7px;background:var(--green);color:#0f1117;font-size:12px;font-weight:700;text-decoration:none;transition:opacity .15s;white-space:nowrap}
+.ac-lb-btn:hover{opacity:.85}
+
+/* Buttons */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:8px;font-size:13px;font-weight:700;border:none;cursor:pointer;font-family:inherit;transition:all .15s}
+.btn-submit{background:var(--accent);color:#fff}.btn-submit:hover{background:#7c73ff}.btn-submit:disabled{opacity:.45;cursor:not-allowed}
+.btn-test{background:rgba(0,212,170,.15);color:var(--accent2);border:1px solid rgba(0,212,170,.35)}.btn-test:hover{background:rgba(0,212,170,.25)}.btn-test:disabled{opacity:.45;cursor:not-allowed}
+.btn-ghost{background:transparent;color:var(--muted);border:1px solid var(--border)}.btn-ghost:hover{background:var(--surface2);color:var(--text)}
+
+/* Spinner */
+.spin{display:inline-block;width:13px;height:13px;border:2px solid rgba(255,255,255,.25);border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Toast */
+#toast-wrap{position:fixed;bottom:20px;right:20px;z-index:999;display:flex;flex-direction:column;gap:8px}
+.toast-item{padding:10px 16px;border-radius:10px;font-size:13px;font-weight:600;animation:slideIn .2s ease}
+.toast-item.error{background:#7f1d1d;color:#fca5a5;border:1px solid #dc2626}
+.toast-item.success{background:#166534;color:#86efac;border:1px solid #16a34a}
+.toast-item.info{background:var(--surface);color:var(--text);border:1px solid var(--border)}
+@keyframes slideIn{from{transform:translateX(60px);opacity:0}to{transform:none;opacity:1}}
+
+::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+@media(max-width:860px){.prob-statement{display:none}}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand"><div class="brand-icon">⚖️</div>Judge <span class="demo-badge">DEMO</span></div>
+  <div class="topbar-right">
+    <div class="key-wrap">
+      <label>API Key</label>
+      <input id="api-key" type="password" placeholder="sk_..." autocomplete="off"/>
+    </div>
+    <a href="/leaderboard.html">🏆 Leaderboard</a>
+    <a href="/solve.html">📝 Solve</a>
+    <a href="/docs.html" target="_blank">📄 Docs</a>
+  </div>
+</header>
+
+<!-- Identity bar -->
+<div class="identity-bar">
+  <div class="identity-avatar" id="id-avatar"></div>
+  <div class="identity-info">
+    <div class="identity-label">Danh tính của bạn trong session này</div>
+    <div class="identity-user">
+      Bạn đang chơi với tên <code id="id-name">...</code>
+      <span class="rank-pill" id="id-rank" style="display:none">— chưa có hạng</span>
+    </div>
+  </div>
+  <div class="identity-actions">
+    <button class="id-btn" onclick="copyUserRef()" title="Copy userRef">📋 Copy</button>
+    <button class="id-btn" onclick="rerollUserRef()">🎲 Đổi tên</button>
+    <a href="/leaderboard.html" class="id-btn primary">🏆 Xem bảng xếp hạng</a>
+  </div>
+</div>
+
+<div class="workspace">
+
+  <!-- Problem list -->
+  <aside class="prob-list">
+    <div class="prob-list-head">
+      <span>Problems</span>
+      <span id="prob-count" style="color:var(--accent2);font-size:11px"></span>
+    </div>
+    <div class="prob-search">
+      <input id="prob-search" placeholder="Tìm bài..." oninput="filterProblems()"/>
+    </div>
+    <div class="prob-items" id="prob-items">
+      <div class="prob-empty">Nhập API Key để tải danh sách bài</div>
+    </div>
+  </aside>
+
+  <div class="content">
+    <!-- Problem statement -->
+    <div class="prob-statement hidden" id="prob-statement">
+      <div class="prob-title" id="ps-title"></div>
+      <div class="prob-limits">
+        <div class="limit-badge">⏱ <span id="ps-time"></span> ms</div>
+        <div class="limit-badge">💾 <span id="ps-mem"></span> MB</div>
+        <div class="limit-badge" id="ps-diff-badge" style="display:none"></div>
+      </div>
+      <div class="tags-row" id="ps-tags"></div>
+      <div class="prob-stats">
+        <div>Đã giải: <span id="ps-solved">—</span></div>
+        <div>Tỷ lệ AC: <span id="ps-rate">—</span></div>
+      </div>
+      <div class="prob-desc" id="ps-desc"></div>
+    </div>
+    <div class="prob-none" id="prob-none">
+      <div class="ni">🎮</div>
+      <div style="font-size:15px;font-weight:700">Chọn một bài toán</div>
+      <div style="font-size:13px;color:var(--muted)">Nộp bài để lên bảng xếp hạng!</div>
+    </div>
+
+    <!-- Editor + result -->
+    <div class="editor-panel" id="editor-panel">
+      <div class="editor-toolbar">
+        <select class="lang-select" id="lang-select">
+          <option value="cpp">C++17 (GCC 13)</option>
+          <option value="java">Java 21</option>
+          <option value="python">Python 3.12</option>
+        </select>
+        <button class="btn btn-ghost" onclick="clearCode()" style="padding:4px 10px;font-size:12px">🗑</button>
+        <div style="flex:1"></div>
+        <button class="btn btn-test" id="btn-test" onclick="runSolution(true)" disabled>🧪 Kiểm tra</button>
+        <button class="btn btn-submit" id="btn-submit" onclick="runSolution(false)" disabled>▶ Nộp bài</button>
+      </div>
+      <div class="editor-wrap">
+        <textarea id="code" spellcheck="false" placeholder="// Chọn bài toán để bắt đầu..."></textarea>
+      </div>
+      <div class="result-panel">
+        <div class="result-head">
+          <span class="label">Kết quả</span>
+          <span id="result-mode-badge"></span>
+          <span id="result-sub-id" style="font-size:11px;font-family:var(--mono);color:var(--muted)"></span>
+          <div style="flex:1"></div>
+          <span id="result-time-info" style="font-size:12px;color:var(--muted)"></span>
+        </div>
+        <div class="result-body" id="result-body">
+          <div class="result-idle">Nộp bài để thấy kết quả — submission sẽ hiện trên Leaderboard!</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast-wrap"></div>
+
+<script>
+const BASE = window.location.origin;
+let apiKey = localStorage.getItem('judge_key') || '';
+let currentProblem = null;
+let allProblems = [];
+let pollTimer = null;
+let stompClient = null;
+let userRef = null;
+
+// ── UserRef ────────────────────────────────────────────────────────
+const ADJECTIVES = ['swift','brave','calm','dark','epic','fast','wild','cool','bold','keen',
+  'loud','neon','wise','sharp','sly','iron','zany','fuzzy','tiny','giant'];
+const ANIMALS = ['fox','wolf','bear','hawk','lynx','crow','frog','puma','seal','deer',
+  'owl','kite','mole','viper','bison','crane','raven','gecko','moose','whale'];
+const COLORS = ['#6c63ff','#00d4aa','#3b82f6','#f59e0b','#22c55e','#a855f7','#ef4444','#06b6d4','#ec4899','#84cc16'];
+
+function randomUserRef() {
+  const adj = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)];
+  const ani = ANIMALS[Math.floor(Math.random() * ANIMALS.length)];
+  const num = Math.floor(Math.random() * 900) + 100;
+  return `${adj}_${ani}_${num}`;
+}
+
+function avatarInitials(ref) {
+  const parts = ref.split('_');
+  return (parts[0][0] + (parts[1]?.[0] || '')).toUpperCase();
+}
+
+function avatarColor(ref) {
+  let h = 0;
+  for (let i = 0; i < ref.length; i++) h = (h * 31 + ref.charCodeAt(i)) & 0xfffffff;
+  return COLORS[h % COLORS.length];
+}
+
+function applyUserRef(ref) {
+  userRef = ref;
+  sessionStorage.setItem('demo_userref', ref);
+  document.getElementById('id-name').textContent = ref;
+  const color = avatarColor(ref);
+  const av = document.getElementById('id-avatar');
+  av.textContent = avatarInitials(ref);
+  av.style.background = color + '22';
+  av.style.color = color;
+  av.style.border = `1.5px solid ${color}55`;
+}
+
+function initUserRef() {
+  const saved = sessionStorage.getItem('demo_userref');
+  applyUserRef(saved || randomUserRef());
+}
+
+function rerollUserRef() {
+  applyUserRef(randomUserRef());
+  document.getElementById('id-rank').style.display = 'none';
+  toast('Đã đổi tên: ' + userRef, 'info');
+}
+
+function copyUserRef() {
+  navigator.clipboard.writeText(userRef).then(() => toast('Đã copy: ' + userRef, 'success'));
+}
+
+// ── API ────────────────────────────────────────────────────────────
+async function api(path, opts = {}) {
+  const res = await fetch(BASE + path, {
+    ...opts,
+    headers: { 'X-API-Key': apiKey, ...(opts.headers || {}) }
+  });
+  if (res.status === 204) return null;
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.message || 'HTTP ' + res.status);
+  return data;
+}
+
+// ── Toast ──────────────────────────────────────────────────────────
+function toast(msg, type = 'error') {
+  const el = document.createElement('div');
+  el.className = 'toast-item ' + type;
+  el.textContent = msg;
+  document.getElementById('toast-wrap').appendChild(el);
+  setTimeout(() => el.remove(), 3500);
+}
+
+// ── API Key ────────────────────────────────────────────────────────
+const keyInput = document.getElementById('api-key');
+keyInput.value = apiKey;
+keyInput.addEventListener('change', () => {
+  apiKey = keyInput.value.trim();
+  localStorage.setItem('judge_key', apiKey);
+  loadProblems();
+});
+
+// ── Problems ───────────────────────────────────────────────────────
+async function loadProblems() {
+  if (!apiKey) {
+    document.getElementById('prob-items').innerHTML = '<div class="prob-empty">Nhập API Key để tải danh sách bài</div>';
+    return;
+  }
+  try {
+    const data = await api('/api/v1/problems?size=200');
+    allProblems = data.content || [];
+    document.getElementById('prob-count').textContent = allProblems.length + ' bài';
+    renderProblems(allProblems);
+  } catch(e) { toast('Không tải được bài: ' + e.message); }
+}
+
+function renderProblems(list) {
+  if (!list.length) {
+    document.getElementById('prob-items').innerHTML = '<div class="prob-empty">Không tìm thấy bài nào</div>';
+    return;
+  }
+  const diffColor = { easy: 'diff-easy', medium: 'diff-medium', hard: 'diff-hard' };
+  document.getElementById('prob-items').innerHTML = list.map(p => `
+    <div class="prob-item" id="pi-${p.id}" onclick="selectProblem(${JSON.stringify(p).replace(/"/g,'&quot;')})">
+      <div class="pi-title">${esc(p.title)}</div>
+      <div class="pi-meta">
+        ${p.difficulty ? `<span class="pi-diff ${diffColor[p.difficulty]||''}">${p.difficulty}</span>` : ''}
+        <span>${p.timeLimitMs}ms</span>
+        ${p.solvedCount != null ? `<span>✓ ${p.solvedCount}</span>` : ''}
+      </div>
+    </div>`).join('');
+}
+
+function filterProblems() {
+  const q = document.getElementById('prob-search').value.trim().toLowerCase();
+  renderProblems(q ? allProblems.filter(p =>
+    p.title.toLowerCase().includes(q) ||
+    (p.tags || []).some(t => t.toLowerCase().includes(q))
+  ) : allProblems);
+}
+
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/'/g,'&#39;').replace(/"/g,'&quot;').replace(/\n/g,'\\n');
+}
+
+function selectProblem(p) {
+  if (typeof p === 'string') p = JSON.parse(p);
+  currentProblem = p;
+  document.querySelectorAll('.prob-item').forEach(el => el.classList.remove('active'));
+  document.getElementById('pi-' + p.id)?.classList.add('active');
+
+  document.getElementById('ps-title').textContent = p.title;
+  document.getElementById('ps-time').textContent = p.timeLimitMs;
+  document.getElementById('ps-mem').textContent = ((p.memoryLimitKb||0) / 1024).toFixed(0);
+
+  const diffBadge = document.getElementById('ps-diff-badge');
+  if (p.difficulty) {
+    diffBadge.style.display = '';
+    diffBadge.textContent = p.difficulty;
+    diffBadge.style.color = {easy:'var(--green)',medium:'var(--yellow)',hard:'var(--red)'}[p.difficulty] || 'var(--muted)';
+  } else { diffBadge.style.display = 'none'; }
+
+  const tagsRow = document.getElementById('ps-tags');
+  tagsRow.innerHTML = (p.tags||[]).map(t => `<span class="tag">${esc(t)}</span>`).join('');
+
+  document.getElementById('ps-solved').textContent = p.solvedCount != null ? p.solvedCount + ' người' : '—';
+  document.getElementById('ps-rate').textContent = p.acceptanceRate != null ? p.acceptanceRate.toFixed(1) + '%' : '—';
+
+  const raw = (p.description||'').replace(/\\n/g, '\n');
+  const el = document.getElementById('ps-desc');
+  if (raw) {
+    el.innerHTML = DOMPurify.sanitize((p.descriptionFormat||'MARKDOWN') === 'HTML' ? raw : marked.parse(raw));
+  } else {
+    el.textContent = '(Chưa có mô tả)';
+  }
+
+  document.getElementById('prob-statement').classList.remove('hidden');
+  document.getElementById('prob-none').style.display = 'none';
+  document.getElementById('btn-submit').disabled = false;
+  document.getElementById('btn-test').disabled = false;
+
+  const lang = document.getElementById('lang-select').value;
+  if (!document.getElementById('code').value.trim() || Object.values(TEMPLATES).includes(document.getElementById('code').value)) {
+    document.getElementById('code').value = TEMPLATES[lang] || '';
+  }
+  resetResult();
+}
+
+// ── Templates ──────────────────────────────────────────────────────
+const TEMPLATES = {
+  cpp: `#include <bits/stdc++.h>
+using namespace std;
+
+int main() {
+    ios_base::sync_with_stdio(false);
+    cin.tie(NULL);
+
+    // TODO: viết code ở đây
+
+    return 0;
+}`,
+  java: `import java.util.*;
+import java.io.*;
+
+public class Solution {
+    public static void main(String[] args) throws IOException {
+        BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
+
+        // TODO: viết code ở đây
+
+    }
+}`,
+  python: `import sys
+input = sys.stdin.readline
+
+def main():
+    # TODO: viết code ở đây
+    pass
+
+main()`
+};
+
+document.getElementById('lang-select').addEventListener('change', e => {
+  const code = document.getElementById('code');
+  if (!code.value.trim() || Object.values(TEMPLATES).includes(code.value)) {
+    code.value = TEMPLATES[e.target.value] || '';
+  }
+});
+
+function clearCode() {
+  document.getElementById('code').value = TEMPLATES[document.getElementById('lang-select').value] || '';
+}
+
+// ── Submit / Test ──────────────────────────────────────────────────
+async function runSolution(isTestRun) {
+  if (!currentProblem) { toast('Chưa chọn bài toán'); return; }
+  const code = document.getElementById('code').value.trim();
+  if (!code) { toast('Code trống'); return; }
+
+  const btnSubmit = document.getElementById('btn-submit');
+  const btnTest   = document.getElementById('btn-test');
+  btnSubmit.disabled = true;
+  btnTest.disabled   = true;
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+  if (stompClient) { try { stompClient.disconnect(); } catch(e) {} stompClient = null; }
+  resetResult();
+
+  const lang = document.getElementById('lang-select').value;
+
+  if (isTestRun) {
+    btnTest.innerHTML = '<span class="spin" style="border-top-color:var(--accent2);border-color:rgba(0,212,170,.3)"></span> Đang kiểm tra…';
+    setResultSpinner('TEST MẪU', 'accent2');
+    try {
+      const res = await api('/api/v1/submissions/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ problemId: currentProblem.id, language: lang, sourceCode: code })
+      });
+      renderResult(res);
+    } catch(e) {
+      toast('Kiểm tra thất bại: ' + e.message);
+      document.getElementById('result-body').innerHTML = '<div class="result-idle">Kiểm tra thất bại.</div>';
+    } finally {
+      btnSubmit.disabled = false; btnTest.disabled = false;
+      btnTest.innerHTML = '🧪 Kiểm tra';
+    }
+  } else {
+    btnSubmit.innerHTML = '<span class="spin"></span> Đang nộp…';
+    setResultSpinner('NỘP BÀI', 'accent');
+    try {
+      const res = await api('/api/v1/submissions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          problemId: currentProblem.id,
+          language: lang,
+          sourceCode: code,
+          userRef: userRef
+        })
+      });
+      document.getElementById('result-sub-id').textContent = res.submissionId;
+      renderResult(res);
+      if (['PENDING','JUDGING'].includes(res.status)) startWsTracking(res.submissionId);
+    } catch(e) {
+      toast('Nộp bài thất bại: ' + e.message);
+      document.getElementById('result-body').innerHTML = '<div class="result-idle">Nộp bài thất bại.</div>';
+      btnSubmit.disabled = false; btnTest.disabled = false;
+      btnSubmit.innerHTML = '▶ Nộp bài';
+    }
+  }
+}
+
+function setResultSpinner(label, colorVar) {
+  const c = `var(--${colorVar})`;
+  const bc = colorVar === 'accent' ? 'rgba(108,99,255,.15)' : 'rgba(0,212,170,.15)';
+  document.getElementById('result-mode-badge').innerHTML =
+    `<span style="font-size:11px;font-weight:700;background:${bc};color:${c};border:1px solid ${bc};border-radius:5px;padding:1px 7px;margin-left:6px">${label}</span>`;
+  document.getElementById('result-body').innerHTML =
+    `<div class="result-idle"><span class="spin" style="border-top-color:${c};border-color:${bc}"></span> Đang xử lý…</div>`;
+}
+
+// ── WebSocket ──────────────────────────────────────────────────────
+function startWsTracking(subId) {
+  let connected = false;
+  const timeout = setTimeout(() => { if (!connected) startPolling(subId); }, 3000);
+  try {
+    const socket = new SockJS(BASE + '/ws');
+    stompClient = Stomp.over(socket);
+    stompClient.debug = null;
+    stompClient.connect({}, () => {
+      connected = true; clearTimeout(timeout);
+      stompClient.subscribe('/topic/submissions/' + subId, msg => {
+        const r = JSON.parse(msg.body);
+        renderResult(r);
+        if (!['PENDING','JUDGING'].includes(r.status)) {
+          try { stompClient.disconnect(); } catch(e) {} stompClient = null;
+          document.getElementById('btn-submit').disabled = false;
+          document.getElementById('btn-test').disabled = false;
+          document.getElementById('btn-submit').innerHTML = '▶ Nộp bài';
+          if (r.status === 'AC') onAC();
+        }
+      });
+    }, () => { if (!connected) { clearTimeout(timeout); startPolling(subId); } });
+  } catch(e) { clearTimeout(timeout); startPolling(subId); }
+}
+
+function startPolling(subId) {
+  let tries = 0;
+  pollTimer = setInterval(async () => {
+    if (++tries > 60) { clearInterval(pollTimer); return; }
+    try {
+      const r = await api('/api/v1/submissions/' + subId);
+      renderResult(r);
+      if (!['PENDING','JUDGING'].includes(r.status)) {
+        clearInterval(pollTimer); pollTimer = null;
+        document.getElementById('btn-submit').disabled = false;
+        document.getElementById('btn-test').disabled = false;
+        document.getElementById('btn-submit').innerHTML = '▶ Nộp bài';
+        if (r.status === 'AC') onAC();
+      }
+    } catch(e) { clearInterval(pollTimer); }
+  }, 1500);
+}
+
+// ── On AC ──────────────────────────────────────────────────────────
+function onAC() {
+  toast('🎉 Chính xác! Kết quả đã cập nhật lên Leaderboard.', 'success');
+  fetchMyRank();
+}
+
+async function fetchMyRank() {
+  try {
+    const res = await fetch(`${BASE}/api/v1/leaderboard?limit=200`);
+    const data = await res.json();
+    const me = data.find(r => r.userRef === userRef);
+    if (me) {
+      const pill = document.getElementById('id-rank');
+      pill.style.display = '';
+      pill.textContent = `🏆 Hạng #${me.rank ?? (data.indexOf(me) + 1)} · ${me.solvedCount} bài`;
+    }
+  } catch(e) {}
+}
+
+// ── Render result ──────────────────────────────────────────────────
+function renderResult(r) {
+  const v = r.status || 'PENDING';
+  const body = document.getElementById('result-body');
+  const tcs = r.testResults || [];
+  const timeStr = r.timeMs != null ? `${r.timeMs} ms` : '';
+  const memStr  = r.memoryKb != null ? `${r.memoryKb} KB` : '';
+  document.getElementById('result-time-info').textContent =
+    [timeStr, memStr].filter(Boolean).join(' · ');
+
+  let html = '';
+
+  if (v === 'AC' && !r.testRun) {
+    html += `<div class="ac-banner">
+      <div class="ac-banner-left">
+        <span style="font-size:20px">🎉</span>
+        <div><div class="ac-banner-text">Accepted! Submission của bạn đã được ghi nhận.</div>
+        <div class="ac-banner-sub">Đang cập nhật bảng xếp hạng...</div></div>
+      </div>
+      <a class="ac-lb-btn" href="/leaderboard.html">🏆 Xem Leaderboard</a>
+    </div>`;
+  }
+
+  html += `<div class="verdict-row">
+    <span class="verdict-big ${v}">${v}</span>
+    ${r.score != null ? `<span class="verdict-meta">Điểm: <strong>${r.score}</strong></span>` : ''}
+    ${timeStr ? `<span class="verdict-meta">${timeStr}</span>` : ''}
+  </div>`;
+
+  if (tcs.length) {
+    html += `<div class="tc-results">${tcs.map((tc, i) =>
+      `<span class="tc-chip ${tc.status}" title="TC${i+1}: ${tc.timeMs ?? '?'}ms">#${i+1} ${tc.status}</span>`
+    ).join('')}</div>`;
+  }
+  if (r.errorMessage) {
+    html += `<div class="err-box">${esc(r.errorMessage)}</div>`;
+  }
+  body.innerHTML = html;
+}
+
+function resetResult() {
+  document.getElementById('result-body').innerHTML = '<div class="result-idle">Đang chờ kết quả...</div>';
+  document.getElementById('result-sub-id').textContent = '';
+  document.getElementById('result-time-info').textContent = '';
+  document.getElementById('result-mode-badge').innerHTML = '';
+}
+
+// ── Tab key in textarea ────────────────────────────────────────────
+document.getElementById('code').addEventListener('keydown', e => {
+  if (e.key === 'Tab') {
+    e.preventDefault();
+    const el = e.target;
+    const s = el.selectionStart, end = el.selectionEnd;
+    el.value = el.value.substring(0, s) + '    ' + el.value.substring(end);
+    el.selectionStart = el.selectionEnd = s + 4;
+  }
+});
+
+// ── Init ───────────────────────────────────────────────────────────
+initUserRef();
+if (apiKey) loadProblems();
+// Show rank on load if we've submitted before
+setTimeout(fetchMyRank, 500);
+</script>
+</body>
+</html>
