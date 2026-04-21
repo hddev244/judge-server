@@ -1,10 +1,7 @@
 package com.judge.service;
 
 import com.judge.api.dto.*;
-import com.judge.domain.Problem;
-import com.judge.domain.ProblemTag;
-import com.judge.domain.Subtask;
-import com.judge.domain.TestCase;
+import com.judge.domain.*;
 import com.judge.exception.JudgeException;
 import com.judge.judge.DockerRunner;
 import com.judge.repository.*;
@@ -28,6 +25,8 @@ public class ProblemService {
     private final ProblemTagRepository problemTagRepository;
     private final TestCaseRepository testCaseRepository;
     private final SubtaskRepository subtaskRepository;
+    private final TopicRepository topicRepository;
+    private final CategoryRepository categoryRepository;
     private final DockerRunner dockerRunner;
     private final String basePath;
 
@@ -35,12 +34,16 @@ public class ProblemService {
                           ProblemTagRepository problemTagRepository,
                           TestCaseRepository testCaseRepository,
                           SubtaskRepository subtaskRepository,
+                          TopicRepository topicRepository,
+                          CategoryRepository categoryRepository,
                           DockerRunner dockerRunner,
                           @Value("${judge.testcase.base-path}") String basePath) {
         this.problemRepository = problemRepository;
         this.problemTagRepository = problemTagRepository;
         this.testCaseRepository = testCaseRepository;
         this.subtaskRepository = subtaskRepository;
+        this.topicRepository = topicRepository;
+        this.categoryRepository = categoryRepository;
         this.dockerRunner = dockerRunner;
         this.basePath = basePath;
     }
@@ -62,7 +65,9 @@ public class ProblemService {
                 .build();
         problem = problemRepository.save(problem);
         List<String> tags = saveTags(problem, req.getTags());
-        return ProblemResponse.from(problem, tags);
+        syncTopics(problem, req.getTopicIds());
+        syncCategories(problem, req.getCategoryIds());
+        return ProblemResponse.from(problem);
     }
 
     @Transactional
@@ -77,7 +82,9 @@ public class ProblemService {
         problem = problemRepository.save(problem);
         problemTagRepository.deleteByProblemId(id);
         List<String> tags = saveTags(problem, req.getTags());
-        return ProblemResponse.from(problem, tags);
+        syncTopics(problem, req.getTopicIds());
+        syncCategories(problem, req.getCategoryIds());
+        return ProblemResponse.from(problem);
     }
 
     @Transactional(readOnly = true)
@@ -109,6 +116,11 @@ public class ProblemService {
     public List<ProblemResponse> listPublished() {
         return problemRepository.findByIsPublishedTrueOrderByIdAsc()
                 .stream().map(ProblemResponse::from).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public ProblemResponse getById(Long id) {
+        return ProblemResponse.from(getOrThrow(id));
     }
 
     @Transactional(readOnly = true)
@@ -258,6 +270,28 @@ public class ProblemService {
 
     private void tryDelete(String path) {
         try { Files.deleteIfExists(Path.of(path)); } catch (IOException ignored) {}
+    }
+
+    private void syncTopics(Problem problem, List<Long> topicIds) {
+        problem.getTopics().forEach(t -> t.getProblems().remove(problem));
+        problem.getTopics().clear();
+        if (topicIds == null || topicIds.isEmpty()) return;
+        topicIds.stream().distinct().forEach(tid ->
+                topicRepository.findById(tid).ifPresent(t -> {
+                    problem.getTopics().add(t);
+                    t.getProblems().add(problem);
+                }));
+    }
+
+    private void syncCategories(Problem problem, List<Long> categoryIds) {
+        problem.getCategories().forEach(c -> c.getProblems().remove(problem));
+        problem.getCategories().clear();
+        if (categoryIds == null || categoryIds.isEmpty()) return;
+        categoryIds.stream().distinct().forEach(cid ->
+                categoryRepository.findById(cid).ifPresent(c -> {
+                    problem.getCategories().add(c);
+                    c.getProblems().add(problem);
+                }));
     }
 
     /** Persists the tag list and returns the normalized tag strings. */

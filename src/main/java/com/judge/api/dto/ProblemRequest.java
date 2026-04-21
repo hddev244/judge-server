@@ -28,4 +28,8 @@ public class ProblemRequest {
     private String difficulty;
 
     private List<String> tags;
+
+    private List<Long> topicIds;
+
+    private List<Long> categoryIds;
 }

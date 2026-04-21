@@ -13,8 +13,6 @@
       --mono:'JetBrains Mono','Fira Code','Cascadia Code',monospace;
     }
     body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);line-height:1.7}
-
-    /* Layout */
     .layout{display:flex;min-height:100vh}
 
     /* Sidebar */
@@ -80,7 +78,9 @@
     .badge.admin{background:rgba(168,85,247,.2);color:var(--purple)}
     .badge.auth{background:rgba(245,158,11,.15);color:var(--yellow)}
     .badge.sync{background:rgba(0,212,170,.15);color:var(--accent2)}
+    .badge.public{background:rgba(34,197,94,.12);color:var(--green)}
     .badge.new{background:rgba(34,197,94,.15);color:var(--green)}
+    .badge.ws{background:rgba(108,99,255,.2);color:var(--accent)}
 
     /* Status grid */
     .status-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
@@ -122,6 +122,8 @@
     ::-webkit-scrollbar-track{background:transparent}
     ::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
 
+    .sub-label{font-size:11px;font-weight:700;margin:20px 0 10px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px}
+
     @media(max-width:768px){.sidebar{display:none}.main{padding:24px 20px 60px}.hero{padding:24px 20px}.hero h1{font-size:24px}}
   </style>
 </head>
@@ -147,19 +149,23 @@
   <div class="sidebar-section">
     <div class="sidebar-section-label">API</div>
     <a href="#submissions"><span class="dot" style="background:#22c55e"></span>Submissions</a>
+    <a href="#websocket"><span class="dot" style="background:#6c63ff"></span>WebSocket Realtime</a>
     <a href="#testrun"><span class="dot" style="background:#00d4aa"></span>Test Run</a>
-    <a href="#problems"><span class="dot" style="background:#3b82f6"></span>Problems</a>
+    <a href="#problems"><span class="dot" style="background:#3b82f6"></span>Problems &amp; Search</a>
+    <a href="#leaderboard"><span class="dot" style="background:#00d4aa"></span>Leaderboard</a>
+    <a href="#contests"><span class="dot" style="background:#f59e0b"></span>Contests (Public)</a>
     <a href="#admin"><span class="dot" style="background:#a855f7"></span>Admin — Problems</a>
     <a href="#subtasks"><span class="dot" style="background:#a855f7"></span>Admin — Subtasks</a>
     <a href="#checker"><span class="dot" style="background:#a855f7"></span>Admin — Checker</a>
     <a href="#import"><span class="dot" style="background:#a855f7"></span>Admin — Import ZIP</a>
+    <a href="#admin-contests"><span class="dot" style="background:#a855f7"></span>Admin — Contests</a>
     <a href="#webhook"><span class="dot" style="background:#f59e0b"></span>Webhook</a>
   </div>
 
   <div class="sidebar-section">
     <div class="sidebar-section-label">Tham chiếu</div>
     <a href="#verdicts"><span class="dot" style="background:#ef4444"></span>Verdict codes</a>
-    <a href="#errors"><span class="dot" style="background:#8b8fa8"></span>Lỗi & Rate limit</a>
+    <a href="#errors"><span class="dot" style="background:#8b8fa8"></span>Lỗi &amp; Rate limit</a>
     <a href="#languages"><span class="dot" style="background:#80cbc4"></span>Ngôn ngữ</a>
   </div>
 </nav>
@@ -171,11 +177,12 @@
   <div class="hero" id="overview">
     <div class="hero-badge">⚡ Judge as a Service</div>
     <h1>Judge Server <span>API</span></h1>
-    <p>Hệ thống chấm bài lập trình tự động hỗ trợ C++, Java, Python. Gửi code — nhận verdict trong vài giây. Hỗ trợ test thử trên test mẫu và nộp bài chính thức.</p>
+    <p>Hệ thống chấm bài lập trình tự động — C++, Java, Python. Docker sandbox cô lập, verdict realtime qua WebSocket, contest mode, subtask scoring, custom checker.</p>
     <div class="hero-meta">
       <div class="meta-item">🌐 <strong>Base URL</strong> <code style="background:rgba(255,255,255,.08);padding:2px 8px;border-radius:5px">http://&lt;server-ip&gt;:8080</code></div>
       <div class="meta-item">📋 <strong>Version</strong> v1</div>
       <div class="meta-item">🔑 <strong>Auth</strong> X-API-Key (header)</div>
+      <div class="meta-item">📡 <strong>Realtime</strong> STOMP over SockJS</div>
     </div>
   </div>
 
@@ -207,17 +214,18 @@
       <div class="step">
         <div class="step-num"></div>
         <div class="step-content">
-          <h4>Nộp bài chính thức</h4>
+          <h4>Nộp bài chính thức (realtime qua WebSocket)</h4>
           <div class="code-block">
             <div class="code-header"><span>bash</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
             <pre><span class="c"># 1. Nộp</span>
 curl -X POST http://&lt;server-ip&gt;:8080/api/v1/submissions \
   -H <span class="s">"X-API-Key: YOUR_KEY"</span> \
   -H <span class="s">"Content-Type: application/json"</span> \
-  -d <span class="s">'{"problemId":1,"language":"cpp","sourceCode":"..."}'</span>
+  -d <span class="s">'{"problemId":1,"language":"cpp","sourceCode":"...","userRef":"alice"}'</span>
 <span class="c"># → {"submissionId":"sub_xxxxxxxxxx","status":"PENDING",...}</span>
 
-<span class="c"># 2. Lấy kết quả (poll đến khi status != PENDING/JUDGING)</span>
+<span class="c"># 2a. Nhận verdict realtime — subscribe WebSocket /topic/submissions/{id}</span>
+<span class="c"># 2b. Hoặc poll REST mỗi 1–2s</span>
 curl -H <span class="s">"X-API-Key: YOUR_KEY"</span> \
   http://&lt;server-ip&gt;:8080/api/v1/submissions/<span class="v">sub_xxxxxxxxxx</span></pre>
           </div>
@@ -236,7 +244,18 @@ curl -H <span class="s">"X-API-Key: YOUR_KEY"</span> \
     </div>
     <div class="alert warn">⚠️ API Key là thông tin bí mật. Không commit vào source code hay chia sẻ công khai.</div>
 
-    <div class="card">
+    <p class="sub-label" style="margin-top:20px">Endpoints PUBLIC (không cần key)</p>
+    <table>
+      <tr><th>Endpoint</th><th>Mô tả</th></tr>
+      <tr><td><code>GET /api/v1/leaderboard</code></td><td>Bảng xếp hạng global</td></tr>
+      <tr><td><code>GET /api/v1/users/{userRef}/stats</code></td><td>Thống kê người dùng</td></tr>
+      <tr><td><code>GET /api/v1/contests</code></td><td>Danh sách contest đang mở</td></tr>
+      <tr><td><code>GET /api/v1/contests/{slug}</code></td><td>Chi tiết contest</td></tr>
+      <tr><td><code>POST /api/v1/contests/{slug}/register</code></td><td>Đăng ký tham dự</td></tr>
+      <tr><td><code>GET /api/v1/contests/{slug}/scoreboard</code></td><td>Bảng điểm contest</td></tr>
+    </table>
+
+    <div class="card" style="margin-top:20px">
       <div class="card-title">JavaScript / Node.js client</div>
       <div class="code-block" style="margin-top:12px">
         <div class="code-header"><span>JavaScript</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
@@ -244,16 +263,6 @@ curl -H <span class="s">"X-API-Key: YOUR_KEY"</span> \
 <span class="k">const</span> API_KEY    = <span class="s">"your_api_key"</span>;
 <span class="k">const</span> headers    = { <span class="s">"X-API-Key"</span>: API_KEY, <span class="s">"Content-Type"</span>: <span class="s">"application/json"</span> };
 
-<span class="c">// Test thử (đồng bộ, không lưu DB)</span>
-<span class="k">async function</span> <span class="p">testRun</span>(problemId, language, sourceCode) {
-  <span class="k">const</span> res = <span class="k">await</span> fetch(`<span class="v">${JUDGE_BASE}</span>/api/v1/submissions/test`, {
-    method: <span class="s">"POST"</span>, headers,
-    body: JSON.stringify({ problemId, language, sourceCode })
-  });
-  <span class="k">return</span> res.json(); <span class="c">// kết quả ngay lập tức</span>
-}
-
-<span class="c">// Nộp bài (async, cần poll)</span>
 <span class="k">async function</span> <span class="p">submitAndWait</span>(problemId, language, sourceCode) {
   <span class="k">const</span> { submissionId } = <span class="k">await</span> (await fetch(`<span class="v">${JUDGE_BASE}</span>/api/v1/submissions`, {
     method: <span class="s">"POST"</span>, headers,
@@ -264,7 +273,7 @@ curl -H <span class="s">"X-API-Key: YOUR_KEY"</span> \
     <span class="k">const</span> r = <span class="k">await</span> (await fetch(`<span class="v">${JUDGE_BASE}</span>/api/v1/submissions/<span class="v">${submissionId}</span>`,
       { headers })).json();
     <span class="k">if</span> (![<span class="s">"PENDING"</span>, <span class="s">"JUDGING"</span>].includes(r.status)) <span class="k">return</span> r;
-    <span class="k">await new</span> Promise(r => setTimeout(r, <span class="n">2000</span>));
+    <span class="k">await new</span> Promise(r => setTimeout(r, <span class="n">1500</span>));
   }
 }</pre>
       </div>
@@ -275,16 +284,7 @@ curl -H <span class="s">"X-API-Key: YOUR_KEY"</span> \
 JUDGE_BASE = <span class="s">"http://&lt;server-ip&gt;:8080"</span>
 HEADERS    = {<span class="s">"X-API-Key"</span>: <span class="s">"your_api_key"</span>}
 
-<span class="k">def</span> <span class="p">test_run</span>(problem_id, language, source_code):
-    <span class="s">"""Test thử — trả kết quả ngay, không lưu DB"""</span>
-    <span class="k">return</span> requests.post(
-        f<span class="s">"{JUDGE_BASE}/api/v1/submissions/test"</span>,
-        headers={**HEADERS, <span class="s">"Content-Type"</span>: <span class="s">"application/json"</span>},
-        json={<span class="s">"problemId"</span>: problem_id, <span class="s">"language"</span>: language, <span class="s">"sourceCode"</span>: source_code}
-    ).json()
-
 <span class="k">def</span> <span class="p">submit_and_wait</span>(problem_id, language, source_code):
-    <span class="s">"""Nộp bài — lưu DB, chờ kết quả qua polling"""</span>
     sub_id = requests.post(
         f<span class="s">"{JUDGE_BASE}/api/v1/submissions"</span>,
         headers={**HEADERS, <span class="s">"Content-Type"</span>: <span class="s">"application/json"</span>},
@@ -295,7 +295,7 @@ HEADERS    = {<span class="s">"X-API-Key"</span>: <span class="s">"your_api_key"
         r = requests.get(f<span class="s">"{JUDGE_BASE}/api/v1/submissions/{sub_id}"</span>, headers=HEADERS).json()
         <span class="k">if</span> r[<span class="s">"status"</span>] <span class="k">not in</span> (<span class="s">"PENDING"</span>, <span class="s">"JUDGING"</span>):
             <span class="k">return</span> r
-        time.sleep(<span class="n">2</span>)</pre>
+        time.sleep(<span class="n">1.5</span>)</pre>
       </div>
     </div>
   </div>
@@ -306,12 +306,12 @@ HEADERS    = {<span class="s">"X-API-Key"</span>: <span class="s">"your_api_key"
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
       <div class="card">
         <div class="card-title">📝 Trang làm bài</div>
-        <p>Chọn bài, viết code, kiểm tra với test mẫu hoặc nộp bài chính thức.</p>
+        <p>Chọn bài, viết code, kiểm tra với test mẫu hoặc nộp bài chính thức. Verdict hiện realtime qua WebSocket.</p>
         <a href="/solve.html" target="_blank" style="display:inline-block;margin-top:12px;color:var(--accent2);font-size:13px;font-weight:600">→ Mở solve.html</a>
       </div>
       <div class="card">
         <div class="card-title">⚙️ Admin Panel</div>
-        <p>Quản lý problem, test case, submissions và API key. Yêu cầu admin key.</p>
+        <p>Quản lý problem, test case, subtask, checker, contest, API key. Yêu cầu admin key.</p>
         <a href="/admin.html" target="_blank" style="display:inline-block;margin-top:12px;color:var(--accent);font-size:13px;font-weight:600">→ Mở admin.html</a>
       </div>
     </div>
@@ -336,6 +336,7 @@ HEADERS    = {<span class="s">"X-API-Key"</span>: <span class="s">"your_api_key"
           <tr><td><code>language</code></td><td><code>string</code></td><td>✅</td><td><code>cpp</code> · <code>java</code> · <code>python</code></td></tr>
           <tr><td><code>sourceCode</code></td><td><code>string</code></td><td>✅</td><td>Mã nguồn đầy đủ</td></tr>
           <tr><td><code>userRef</code></td><td><code>string</code></td><td>—</td><td>ID user trong hệ thống của bạn</td></tr>
+          <tr><td><code>contestId</code></td><td><code>number</code></td><td>—</td><td>ID contest nếu nộp trong contest</td></tr>
           <tr><td><code>callbackUrl</code></td><td><code>string</code></td><td>—</td><td>URL nhận webhook khi chấm xong</td></tr>
         </table>
         <div class="code-block">
@@ -345,13 +346,13 @@ HEADERS    = {<span class="s">"X-API-Key"</span>: <span class="s">"your_api_key"
   <span class="p">"status"</span>:       <span class="s">"PENDING"</span>,
   <span class="p">"score"</span>:        <span class="n">0</span>,
   <span class="p">"timeMs"</span>:       <span class="k">null</span>,
-  <span class="p">"testRun"</span>:      <span class="k">false</span>,
   <span class="p">"language"</span>:     <span class="s">"cpp"</span>,
+  <span class="p">"testRun"</span>:      <span class="k">false</span>,
   <span class="p">"createdAt"</span>:    <span class="s">"2026-04-17T09:00:00"</span>,
   <span class="p">"testResults"</span>:  []
 }</pre>
         </div>
-        <div class="alert info">ℹ️ Poll <code>GET /api/v1/submissions/{id}</code> mỗi 1–2 giây cho đến khi <code>status</code> khác <code>PENDING</code> / <code>JUDGING</code>.</div>
+        <div class="alert info">ℹ️ Sau khi nhận <code>submissionId</code>, subscribe WebSocket <code>/topic/submissions/{id}</code> để nhận verdict realtime, hoặc poll <code>GET /api/v1/submissions/{id}</code> mỗi 1–2 giây.</div>
       </div>
     </div>
 
@@ -386,10 +387,76 @@ HEADERS    = {<span class="s">"X-API-Key"</span>: <span class="s">"your_api_key"
     </div>
   </div>
 
+  <!-- WebSocket -->
+  <div class="section" id="websocket">
+    <div class="section-title"><span>📡</span>WebSocket Realtime</div>
+    <p style="color:var(--muted);font-size:14px;margin-bottom:16px">Server push verdict sau <strong>mỗi test case</strong> — không cần polling. Kết nối STOMP over SockJS (không cần auth).</p>
+
+    <div class="alert tip">💡 solve.html đã tích hợp sẵn WebSocket với 3s timeout fallback sang REST polling. Bạn không cần tự viết nếu dùng giao diện có sẵn.</div>
+
+    <div class="card">
+      <div class="card-title">Kết nối và subscribe</div>
+      <div class="code-block" style="margin-top:12px">
+        <div class="code-header"><span>JavaScript — stomp.js + SockJS</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre><span class="c">// npm install stompjs sockjs-client   hoặc dùng CDN</span>
+<span class="k">const</span> stompClient = Stomp.over(<span class="k">new</span> SockJS(<span class="s">"http://&lt;server-ip&gt;:8080/ws"</span>));
+
+stompClient.connect({}, () => {
+  stompClient.subscribe(
+    `/topic/submissions/<span class="v">${submissionId}</span>`,
+    (msg) => {
+      <span class="k">const</span> data = JSON.parse(msg.body);
+      <span class="c">// Partial update sau mỗi test case:</span>
+      <span class="c">// { status:"JUDGING", testResults:[{testCaseId,status,timeMs,memoryKb},...] }</span>
+
+      <span class="c">// Final verdict khi chấm xong:</span>
+      <span class="c">// { status:"AC", score:100, timeMs:260, testResults:[...], errorMessage:null }</span>
+
+      <span class="k">if</span> (![<span class="s">"PENDING"</span>, <span class="s">"JUDGING"</span>].includes(data.status)) {
+        stompClient.disconnect();
+      }
+    }
+  );
+});
+
+stompClient.activate();</pre>
+      </div>
+    </div>
+
+    <p class="sub-label">WebSocket Payload — Partial update (status = "JUDGING")</p>
+    <div class="code-block">
+      <div class="code-header"><span>JSON</span></div>
+      <pre>{
+  <span class="p">"submissionId"</span>: <span class="s">"sub_39a8bdc114"</span>,
+  <span class="p">"status"</span>: <span class="s">"JUDGING"</span>,
+  <span class="p">"score"</span>: <span class="n">30</span>,
+  <span class="p">"timeMs"</span>: <span class="n">260</span>,
+  <span class="p">"testResults"</span>: [
+    { <span class="p">"testCaseId"</span>: <span class="n">1</span>, <span class="p">"status"</span>: <span class="s">"AC"</span>, <span class="p">"timeMs"</span>: <span class="n">260</span>, <span class="p">"memoryKb"</span>: <span class="n">8192</span> },
+    { <span class="p">"testCaseId"</span>: <span class="n">2</span>, <span class="p">"status"</span>: <span class="s">"AC"</span>, <span class="p">"timeMs"</span>: <span class="n">215</span>, <span class="p">"memoryKb"</span>: <span class="n">8192</span> }
+  ]
+}</pre>
+    </div>
+
+    <p class="sub-label">WebSocket Payload — Final verdict</p>
+    <div class="code-block">
+      <div class="code-header"><span>JSON</span></div>
+      <pre>{
+  <span class="p">"submissionId"</span>: <span class="s">"sub_39a8bdc114"</span>,
+  <span class="p">"status"</span>: <span class="s">"AC"</span>,        <span class="c">// verdict cuối: AC/WA/TLE/MLE/RE/CE/SE</span>
+  <span class="p">"score"</span>: <span class="n">100</span>,
+  <span class="p">"timeMs"</span>: <span class="n">260</span>,
+  <span class="p">"errorMessage"</span>: <span class="k">null</span>,
+  <span class="p">"testResults"</span>: [...]
+}</pre>
+    </div>
+
+    <div class="alert info">ℹ️ REST endpoint <code>GET /api/v1/submissions/{id}</code> vẫn hoạt động bình thường (backward compatible). Dùng WebSocket để nhận kết quả nhanh hơn và tránh polling.</div>
+  </div>
+
   <!-- Test Run -->
   <div class="section" id="testrun">
     <div class="section-title"><span>🧪</span>Test Run — Kiểm tra test mẫu</div>
-
     <div class="alert tip">💡 Test Run chạy <strong>đồng bộ</strong> — trả kết quả ngay trong response, <strong>không lưu vào DB</strong>. Dùng để debug trước khi nộp bài chính thức.</div>
 
     <div class="endpoint">
@@ -411,9 +478,9 @@ HEADERS    = {<span class="s">"X-API-Key"</span>: <span class="s">"your_api_key"
         <div class="code-block">
           <div class="code-header"><span>Response — 200 OK (kết quả trực tiếp)</span></div>
           <pre>{
-  <span class="p">"submissionId"</span>: <span class="k">null</span>,          <span class="c">// không có ID — không lưu DB</span>
+  <span class="p">"submissionId"</span>: <span class="k">null</span>,
   <span class="p">"status"</span>:       <span class="s">"AC"</span>,
-  <span class="p">"score"</span>:        <span class="n">10</span>,             <span class="c">// tổng score của test mẫu đúng</span>
+  <span class="p">"score"</span>:        <span class="n">10</span>,
   <span class="p">"timeMs"</span>:       <span class="n">315</span>,
   <span class="p">"testRun"</span>:      <span class="k">true</span>,
   <span class="p">"language"</span>:     <span class="s">"cpp"</span>,
@@ -422,32 +489,58 @@ HEADERS    = {<span class="s">"X-API-Key"</span>: <span class="s">"your_api_key"
   ]
 }</pre>
         </div>
-        <p style="color:var(--muted);font-size:13.5px">Nếu bài chưa có test case mẫu (<code>isSample=true</code>), trả về <code>status: "SE"</code> với <code>errorMessage</code> giải thích.</p>
       </div>
     </div>
   </div>
 
   <!-- Problems -->
   <div class="section" id="problems">
-    <div class="section-title"><span>📚</span>Problems</div>
+    <div class="section-title"><span>📚</span>Problems &amp; Search</div>
 
     <div class="endpoint">
       <div class="endpoint-header">
         <span class="method GET">GET</span>
         <span class="endpoint-path">/api/v1/problems</span>
         <span class="badge auth">Auth</span>
-        <span class="endpoint-desc">Danh sách bài đã published</span>
+        <span class="endpoint-desc">Tìm kiếm bài đã published (có phân trang)</span>
       </div>
       <div class="endpoint-body">
+        <p style="color:var(--muted);font-size:13.5px;margin:12px 0 8px">Query params:</p>
+        <table>
+          <tr><th>Param</th><th>Mô tả</th><th>Ví dụ</th></tr>
+          <tr><td><code>q</code></td><td>Tìm theo title (LIKE)</td><td><code>?q=sort</code></td></tr>
+          <tr><td><code>tags</code></td><td>Lọc theo tag (AND — bài phải có đủ tất cả)</td><td><code>?tags=dp,greedy</code></td></tr>
+          <tr><td><code>difficulty</code></td><td><code>easy</code> · <code>medium</code> · <code>hard</code></td><td><code>?difficulty=medium</code></td></tr>
+          <tr><td><code>page</code></td><td>Trang (bắt đầu từ 0)</td><td><code>?page=0</code></td></tr>
+          <tr><td><code>size</code></td><td>Số bài mỗi trang (tối đa 100)</td><td><code>?size=20</code></td></tr>
+        </table>
         <div class="code-block">
-          <div class="code-header"><span>Response — 200 OK</span></div>
-          <pre>[
-  {
-    <span class="p">"id"</span>: <span class="n">1</span>, <span class="p">"slug"</span>: <span class="s">"a-plus-b"</span>, <span class="p">"title"</span>: <span class="s">"A + B"</span>,
-    <span class="p">"timeLimitMs"</span>: <span class="n">1000</span>, <span class="p">"memoryLimitKb"</span>: <span class="n">65536</span>, <span class="p">"published"</span>: <span class="k">true</span>
-  },
-  ...
-]</pre>
+          <div class="code-header"><span>Response — 200 OK (paginated)</span></div>
+          <pre>{
+  <span class="p">"content"</span>: [
+    {
+      <span class="p">"id"</span>: <span class="n">1</span>,
+      <span class="p">"slug"</span>: <span class="s">"a-plus-b"</span>,
+      <span class="p">"title"</span>: <span class="s">"A + B"</span>,
+      <span class="p">"difficulty"</span>: <span class="s">"easy"</span>,
+      <span class="p">"tags"</span>: [<span class="s">"math"</span>, <span class="s">"implementation"</span>],
+      <span class="p">"solvedCount"</span>: <span class="n">42</span>,
+      <span class="p">"acceptanceRate"</span>: <span class="n">73.5</span>,
+      <span class="p">"timeLimitMs"</span>: <span class="n">1000</span>,
+      <span class="p">"memoryLimitKb"</span>: <span class="n">262144</span>,
+      <span class="p">"isPublished"</span>: <span class="k">true</span>
+    }
+  ],
+  <span class="p">"totalElements"</span>: <span class="n">42</span>,
+  <span class="p">"page"</span>: <span class="n">0</span>,
+  <span class="p">"size"</span>: <span class="n">20</span>
+}</pre>
+        </div>
+        <div class="code-block">
+          <div class="code-header"><span>bash — ví dụ filter</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+          <pre><span class="c"># Tìm bài medium có tag dp AND greedy, từ khoá "sort"</span>
+curl -H <span class="s">"X-API-Key: YOUR_KEY"</span> \
+  <span class="s">"http://&lt;server-ip&gt;:8080/api/v1/problems?q=sort&amp;tags=dp,greedy&amp;difficulty=medium&amp;page=0&amp;size=20"</span></pre>
         </div>
       </div>
     </div>
@@ -463,31 +556,191 @@ HEADERS    = {<span class="s">"X-API-Key"</span>: <span class="s">"your_api_key"
         <div class="code-block">
           <div class="code-header"><span>Response — 200 OK</span></div>
           <pre>{
-  <span class="p">"id"</span>:              <span class="n">1</span>,
-  <span class="p">"slug"</span>:            <span class="s">"a-plus-b"</span>,
-  <span class="p">"title"</span>:           <span class="s">"A + B"</span>,
-  <span class="p">"description"</span>:        <span class="s">"Nhập hai số nguyên A, B. In ra tổng A+B."</span>,
-  <span class="p">"descriptionFormat"</span>:   <span class="s">"MARKDOWN"</span>,  <span class="c">// "MARKDOWN" | "HTML"</span>
-  <span class="p">"timeLimitMs"</span>:         <span class="n">1000</span>,
-  <span class="p">"memoryLimitKb"</span>:       <span class="n">65536</span>,
-  <span class="p">"published"</span>:           <span class="k">true</span>,
-  <span class="p">"checkerType"</span>:         <span class="s">"EXACT"</span>,     <span class="c">// "EXACT" | "CUSTOM"</span>
-  <span class="p">"checkerLanguage"</span>:     <span class="k">null</span>,
-  <span class="p">"hasChecker"</span>:          <span class="k">false</span>,
-  <span class="p">"createdAt"</span>:           <span class="s">"2026-04-17T08:00:00"</span>
+  <span class="p">"id"</span>:                <span class="n">1</span>,
+  <span class="p">"slug"</span>:              <span class="s">"a-plus-b"</span>,
+  <span class="p">"title"</span>:             <span class="s">"A + B"</span>,
+  <span class="p">"description"</span>:      <span class="s">"## Đề bài\nNhập hai số nguyên a, b. In ra **a+b**."</span>,
+  <span class="p">"descriptionFormat"</span>: <span class="s">"MARKDOWN"</span>,  <span class="c">// "MARKDOWN" | "HTML"</span>
+  <span class="p">"difficulty"</span>:        <span class="s">"easy"</span>,
+  <span class="p">"tags"</span>:              [<span class="s">"math"</span>],
+  <span class="p">"solvedCount"</span>:       <span class="n">42</span>,
+  <span class="p">"acceptanceRate"</span>:    <span class="n">73.5</span>,
+  <span class="p">"timeLimitMs"</span>:       <span class="n">1000</span>,
+  <span class="p">"memoryLimitKb"</span>:     <span class="n">262144</span>,
+  <span class="p">"isPublished"</span>:       <span class="k">true</span>,
+  <span class="p">"checkerType"</span>:       <span class="s">"EXACT"</span>,
+  <span class="p">"createdAt"</span>:         <span class="s">"2026-04-17T08:00:00"</span>
+}</pre>
+        </div>
+        <p style="color:var(--muted);font-size:13.5px"><code>descriptionFormat</code> cho biết cách render: <code>MARKDOWN</code> → dùng marked.js; <code>HTML</code> → dùng DOMPurify.sanitize rồi innerHTML.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Leaderboard -->
+  <div class="section" id="leaderboard">
+    <div class="section-title"><span>🏆</span>Leaderboard &amp; User Stats</div>
+    <div class="alert info">ℹ️ Hai endpoint này <strong>không cần API key</strong>. Leaderboard được cache 5 phút.</div>
+
+    <div class="endpoint">
+      <div class="endpoint-header">
+        <span class="method GET">GET</span>
+        <span class="endpoint-path">/api/v1/leaderboard</span>
+        <span class="badge public">Public</span>
+        <span class="endpoint-desc">Bảng xếp hạng global (cache 5 phút)</span>
+      </div>
+      <div class="endpoint-body">
+        <p style="color:var(--muted);font-size:13.5px;margin:12px 0 8px">Query params: <code>limit</code> (mặc định 50, max 200) · <code>offset</code> (mặc định 0)</p>
+        <div class="code-block">
+          <div class="code-header"><span>Response — 200 OK</span></div>
+          <pre>[
+  {
+    <span class="p">"rank"</span>:          <span class="n">1</span>,
+    <span class="p">"userRef"</span>:       <span class="s">"alice"</span>,
+    <span class="p">"solvedCount"</span>:   <span class="n">18</span>,
+    <span class="p">"totalScore"</span>:    <span class="n">1750</span>,
+    <span class="p">"acceptanceRate"</span>: <span class="n">82.5</span>
+  },
+  ...
+]</pre>
+        </div>
+        <div class="code-block">
+          <div class="code-header"><span>bash</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+          <pre>curl <span class="s">"http://&lt;server-ip&gt;:8080/api/v1/leaderboard?limit=10&amp;offset=0"</span></pre>
+        </div>
+      </div>
+    </div>
+
+    <div class="endpoint">
+      <div class="endpoint-header">
+        <span class="method GET">GET</span>
+        <span class="endpoint-path">/api/v1/users/{userRef}/stats</span>
+        <span class="badge public">Public</span>
+        <span class="endpoint-desc">Thống kê người dùng</span>
+      </div>
+      <div class="endpoint-body">
+        <div class="code-block">
+          <div class="code-header"><span>Response — 200 OK</span></div>
+          <pre>{
+  <span class="p">"userRef"</span>:        <span class="s">"alice"</span>,
+  <span class="p">"solvedCount"</span>:    <span class="n">18</span>,
+  <span class="p">"totalSubmissions"</span>: <span class="n">45</span>,
+  <span class="p">"acceptanceRate"</span>: <span class="n">82.5</span>,
+  <span class="p">"languageBreakdown"</span>: {
+    <span class="p">"cpp"</span>: <span class="n">30</span>, <span class="p">"python"</span>: <span class="n">10</span>, <span class="p">"java"</span>: <span class="n">5</span>
+  },
+  <span class="p">"solvedProblems"</span>: [
+    { <span class="p">"id"</span>: <span class="n">1</span>, <span class="p">"slug"</span>: <span class="s">"a-plus-b"</span>, <span class="p">"title"</span>: <span class="s">"A + B"</span> },
+    ...
+  ],
+  <span class="p">"recentSubmissions"</span>: [
+    { <span class="p">"submissionId"</span>: <span class="s">"sub_..."</span>, <span class="p">"status"</span>: <span class="s">"AC"</span>, <span class="p">"language"</span>: <span class="s">"cpp"</span>, <span class="p">"createdAt"</span>: <span class="s">"..."</span> },
+    ...
+  ]
 }</pre>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- Admin -->
-  <div class="section" id="admin">
-    <div class="section-title"><span>🛡️</span>Admin API</div>
-    <div class="alert warn">⚠️ Tất cả endpoints /admin/** yêu cầu API Key có quyền <strong>admin</strong>. Thiếu quyền → 403 Forbidden.</div>
+  <!-- Contests Public -->
+  <div class="section" id="contests">
+    <div class="section-title"><span>🏅</span>Contests — Thí sinh</div>
 
-    <!-- Stats -->
-    <p style="font-size:14px;font-weight:700;margin:20px 0 10px;color:var(--muted);text-transform:uppercase;font-size:11px;letter-spacing:.8px">THỐNG KÊ</p>
+    <table style="margin-bottom:20px">
+      <tr><th>Method</th><th>Endpoint</th><th>Auth</th><th>Mô tả</th></tr>
+      <tr><td><span class="method GET" style="display:inline-block">GET</span></td><td><code>/api/v1/contests</code></td><td>Public</td><td>Danh sách contest đang mở (isPublic=true hoặc đã đăng ký)</td></tr>
+      <tr><td><span class="method GET" style="display:inline-block">GET</span></td><td><code>/api/v1/contests/{slug}</code></td><td>Public</td><td>Chi tiết contest, danh sách bài</td></tr>
+      <tr><td><span class="method POST" style="display:inline-block">POST</span></td><td><code>/api/v1/contests/{slug}/register</code></td><td>Public</td><td>Đăng ký tham dự</td></tr>
+      <tr><td><span class="method GET" style="display:inline-block">GET</span></td><td><code>/api/v1/contests/{slug}/scoreboard</code></td><td>Public</td><td>Bảng điểm</td></tr>
+    </table>
+
+    <div class="endpoint">
+      <div class="endpoint-header">
+        <span class="method GET">GET</span>
+        <span class="endpoint-path">/api/v1/contests/{slug}</span>
+        <span class="badge public">Public</span>
+        <span class="endpoint-desc">Chi tiết contest</span>
+      </div>
+      <div class="endpoint-body">
+        <div class="code-block">
+          <div class="code-header"><span>Response — 200 OK</span></div>
+          <pre>{
+  <span class="p">"id"</span>:         <span class="n">1</span>,
+  <span class="p">"slug"</span>:       <span class="s">"round-1"</span>,
+  <span class="p">"title"</span>:      <span class="s">"Round 1"</span>,
+  <span class="p">"startTime"</span>:  <span class="s">"2026-05-01T09:00:00"</span>,
+  <span class="p">"endTime"</span>:    <span class="s">"2026-05-01T12:00:00"</span>,
+  <span class="p">"isPublic"</span>:   <span class="k">true</span>,
+  <span class="p">"status"</span>:     <span class="s">"ONGOING"</span>,   <span class="c">// UPCOMING | ONGOING | ENDED</span>
+  <span class="p">"problems"</span>: [
+    { <span class="p">"alias"</span>: <span class="s">"A"</span>, <span class="p">"problemId"</span>: <span class="n">1</span>, <span class="p">"title"</span>: <span class="s">"A + B"</span>, <span class="p">"orderIndex"</span>: <span class="n">1</span> }
+  ]
+}</pre>
+        </div>
+      </div>
+    </div>
+
+    <div class="endpoint">
+      <div class="endpoint-header">
+        <span class="method POST">POST</span>
+        <span class="endpoint-path">/api/v1/contests/{slug}/register</span>
+        <span class="badge public">Public</span>
+        <span class="endpoint-desc">Đăng ký tham dự</span>
+      </div>
+      <div class="endpoint-body">
+        <p style="color:var(--muted);font-size:13.5px;margin:12px 0 8px">Query param: <code>?userRef=alice</code> (bắt buộc)</p>
+        <div class="code-block">
+          <div class="code-header"><span>bash</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+          <pre>curl -X POST <span class="s">"http://&lt;server-ip&gt;:8080/api/v1/contests/round-1/register?userRef=alice"</span></pre>
+        </div>
+      </div>
+    </div>
+
+    <div class="endpoint">
+      <div class="endpoint-header">
+        <span class="method GET">GET</span>
+        <span class="endpoint-path">/api/v1/contests/{slug}/scoreboard</span>
+        <span class="badge public">Public</span>
+        <span class="endpoint-desc">Bảng điểm contest</span>
+      </div>
+      <div class="endpoint-body">
+        <div class="code-block">
+          <div class="code-header"><span>Response — 200 OK</span></div>
+          <pre>[
+  {
+    <span class="p">"rank"</span>:         <span class="n">1</span>,
+    <span class="p">"userRef"</span>:      <span class="s">"alice"</span>,
+    <span class="p">"totalScore"</span>:   <span class="n">100</span>,
+    <span class="p">"totalPenalty"</span>: <span class="n">45</span>,   <span class="c">// phút từ đầu contest + 20 × số WA/TLE/MLE/RE</span>
+    <span class="p">"problems"</span>: {
+      <span class="p">"A"</span>: { <span class="p">"score"</span>: <span class="n">100</span>, <span class="p">"attempts"</span>: <span class="n">1</span>, <span class="p">"solvedAt"</span>: <span class="s">"2026-05-01T09:45:00"</span> }
+    }
+  }
+]</pre>
+        </div>
+        <p style="color:var(--muted);font-size:13.5px">Sắp xếp: <code>totalScore DESC</code>, <code>totalPenalty ASC</code>.</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Nộp bài trong contest</div>
+      <p style="margin-bottom:12px">Thêm <code>contestId</code> vào body của <code>POST /api/v1/submissions</code>. Server tự validate: contest đang ongoing, user đã đăng ký, bài có trong contest.</p>
+      <div class="code-block">
+        <div class="code-header"><span>bash</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre>curl -X POST http://&lt;server-ip&gt;:8080/api/v1/submissions \
+  -H <span class="s">"X-API-Key: YOUR_KEY"</span> -H <span class="s">"Content-Type: application/json"</span> \
+  -d <span class="s">'{"problemId":1,"language":"cpp","sourceCode":"...","userRef":"alice","contestId":1}'</span></pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- Admin Problems -->
+  <div class="section" id="admin">
+    <div class="section-title"><span>🛡️</span>Admin — Problems</div>
+    <div class="alert warn">⚠️ Tất cả endpoints <code>/api/v1/admin/**</code> yêu cầu API Key có quyền <strong>admin</strong>. Thiếu quyền → 403 Forbidden.</div>
+
+    <p class="sub-label">THỐNG KÊ</p>
     <div class="endpoint">
       <div class="endpoint-header">
         <span class="method GET">GET</span>
@@ -509,8 +762,7 @@ HEADERS    = {<span class="s">"X-API-Key"</span>: <span class="s">"your_api_key"
       </div>
     </div>
 
-    <!-- API Keys -->
-    <p style="font-size:11px;font-weight:700;margin:20px 0 10px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px">QUẢN LÝ API KEYS</p>
+    <p class="sub-label">QUẢN LÝ API KEYS</p>
     <div class="endpoint">
       <div class="endpoint-header">
         <span class="method GET">GET</span>
@@ -544,48 +796,35 @@ HEADERS    = {<span class="s">"X-API-Key"</span>: <span class="s">"your_api_key"
       </div>
     </div>
 
-    <div class="endpoint">
-      <div class="endpoint-header">
-        <span class="method PATCH">PATCH</span>
-        <span class="endpoint-path">/api/v1/admin/api-keys/{id}/activate</span>
-        <span class="badge admin">Admin</span>
-        <span class="endpoint-desc">Kích hoạt key</span>
-      </div>
-      <div class="endpoint-body"><p style="color:var(--muted);font-size:13.5px;margin-top:12px">Trả về <code>ApiKeyResponse</code> với <code>active: true</code>.</p></div>
-    </div>
+    <table style="margin-bottom:20px">
+      <tr><th>Method</th><th>Endpoint</th><th>Mô tả</th></tr>
+      <tr><td><span class="method PATCH" style="display:inline-block">PATCH</span></td><td><code>/api/v1/admin/api-keys/{id}/activate</code></td><td>Kích hoạt key</td></tr>
+      <tr><td><span class="method PATCH" style="display:inline-block">PATCH</span></td><td><code>/api/v1/admin/api-keys/{id}/deactivate</code></td><td>Vô hiệu hóa key (phải còn ít nhất 1 admin key active)</td></tr>
+    </table>
 
-    <div class="endpoint">
-      <div class="endpoint-header">
-        <span class="method PATCH">PATCH</span>
-        <span class="endpoint-path">/api/v1/admin/api-keys/{id}/deactivate</span>
-        <span class="badge admin">Admin</span>
-        <span class="endpoint-desc">Vô hiệu hóa key</span>
-      </div>
-      <div class="endpoint-body"><p style="color:var(--muted);font-size:13.5px;margin-top:12px">Key bị vô hiệu hóa sẽ nhận 401 cho mọi request.</p></div>
-    </div>
-
-    <!-- Problems -->
-    <p style="font-size:11px;font-weight:700;margin:20px 0 10px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px">QUẢN LÝ PROBLEMS</p>
+    <p class="sub-label">QUẢN LÝ PROBLEMS</p>
     <table style="margin-bottom:20px">
       <tr><th>Method</th><th>Endpoint</th><th>Mô tả</th></tr>
       <tr><td><span class="method GET" style="display:inline-block">GET</span></td><td><code>/api/v1/admin/problems?page=0&size=20</code></td><td>Danh sách (phân trang, cả draft)</td></tr>
       <tr><td><span class="method POST" style="display:inline-block">POST</span></td><td><code>/api/v1/admin/problems</code></td><td>Tạo problem mới</td></tr>
-      <tr><td><span class="method PUT" style="display:inline-block">PUT</span></td><td><code>/api/v1/admin/problems/{id}</code></td><td>Cập nhật title, description, limits</td></tr>
+      <tr><td><span class="method PUT" style="display:inline-block">PUT</span></td><td><code>/api/v1/admin/problems/{id}</code></td><td>Cập nhật problem</td></tr>
       <tr><td><span class="method POST" style="display:inline-block">POST</span></td><td><code>/api/v1/admin/problems/{id}/publish</code></td><td>Publish (cần có ≥1 test case)</td></tr>
     </table>
+
     <p style="font-size:13px;font-weight:700;margin:0 0 8px">Request body (POST / PUT)</p>
     <table style="margin-bottom:20px">
       <tr><th>Field</th><th>Type</th><th>Mô tả</th></tr>
-      <tr><td><code>slug</code></td><td><code>string</code></td><td>Slug duy nhất, chỉ chứa <code>[a-z0-9-]</code> — <strong>bắt buộc</strong></td></tr>
-      <tr><td><code>title</code></td><td><code>string</code></td><td>Tiêu đề bài — <strong>bắt buộc</strong></td></tr>
-      <tr><td><code>description</code></td><td><code>string</code></td><td>Nội dung bài (Markdown hoặc HTML tùy <code>descriptionFormat</code>)</td></tr>
-      <tr><td><code>descriptionFormat</code></td><td><code>"MARKDOWN" | "HTML"</code></td><td>Format của description — mặc định <code>"MARKDOWN"</code></td></tr>
+      <tr><td><code>slug</code></td><td><code>string</code></td><td>Slug duy nhất <code>[a-z0-9-]</code> — <strong>bắt buộc khi tạo</strong></td></tr>
+      <tr><td><code>title</code></td><td><code>string</code></td><td>Tiêu đề — <strong>bắt buộc khi tạo</strong></td></tr>
+      <tr><td><code>description</code></td><td><code>string</code></td><td>Nội dung bài (Markdown hoặc HTML)</td></tr>
+      <tr><td><code>descriptionFormat</code></td><td><code>"MARKDOWN"&nbsp;|&nbsp;"HTML"</code></td><td>Format render description (mặc định <code>MARKDOWN</code>)</td></tr>
+      <tr><td><code>difficulty</code></td><td><code>"easy"&nbsp;|&nbsp;"medium"&nbsp;|&nbsp;"hard"</code></td><td>Độ khó (tùy chọn)</td></tr>
+      <tr><td><code>tags</code></td><td><code>string[]</code></td><td>Danh sách tags, e.g. <code>["dp","greedy"]</code></td></tr>
       <tr><td><code>timeLimitMs</code></td><td><code>number</code></td><td>Giới hạn thời gian (100–10000 ms)</td></tr>
       <tr><td><code>memoryLimitKb</code></td><td><code>number</code></td><td>Giới hạn bộ nhớ (16384–1048576 KB)</td></tr>
     </table>
 
-    <!-- Test Cases -->
-    <p style="font-size:11px;font-weight:700;margin:20px 0 10px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px">TEST CASES</p>
+    <p class="sub-label">TEST CASES</p>
     <div class="endpoint">
       <div class="endpoint-header">
         <span class="method POST">POST</span>
@@ -598,18 +837,18 @@ HEADERS    = {<span class="s">"X-API-Key"</span>: <span class="s">"your_api_key"
           <tr><th>Form field</th><th>Type</th><th>Mô tả</th></tr>
           <tr><td><code>input</code></td><td>file</td><td>File input (.in)</td></tr>
           <tr><td><code>output</code></td><td>file</td><td>File output expected (.out)</td></tr>
-          <tr><td><code>score</code></td><td><code>number</code></td><td>Điểm của test case này (mặc định 1, bỏ qua nếu dùng subtask)</td></tr>
-          <tr><td><code>isSample</code></td><td><code>boolean</code></td><td>Hiển thị public, dùng cho Test Run (mặc định false)</td></tr>
-          <tr><td><code>subtaskId</code></td><td><code>number</code></td><td>ID subtask để gán test case này vào (tùy chọn)</td></tr>
+          <tr><td><code>score</code></td><td><code>number</code></td><td>Điểm (mặc định 1, bỏ qua nếu dùng subtask)</td></tr>
+          <tr><td><code>isSample</code></td><td><code>boolean</code></td><td>Dùng cho Test Run (mặc định false)</td></tr>
+          <tr><td><code>subtaskId</code></td><td><code>number</code></td><td>Gán vào subtask (tùy chọn)</td></tr>
         </table>
         <div class="code-block">
-          <div class="code-header"><span>bash — upload từng file</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+          <div class="code-header"><span>bash</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
           <pre>curl -X POST http://&lt;server-ip&gt;:8080/api/v1/admin/problems/<span class="n">1</span>/test-cases \
   -H <span class="s">"X-API-Key: ADMIN_KEY"</span> \
   -F <span class="s">"input=@tc1.in"</span> -F <span class="s">"output=@tc1.out"</span> \
   -F <span class="s">"isSample=true"</span> -F <span class="s">"score=10"</span></pre>
         </div>
-        <div class="alert tip">💡 Admin Panel hỗ trợ upload <strong>batch qua file .zip</strong>: đặt các cặp <code>1.in</code>/<code>1.out</code>, <code>2.in</code>/<code>2.out</code>, … vào ZIP → kéo thả vào ô "Batch ZIP" → preview nội dung từng cặp trước khi upload.</div>
+        <div class="alert tip">💡 Admin Panel hỗ trợ upload <strong>batch qua file .zip</strong>: đặt các cặp <code>1.in</code>/<code>1.out</code> vào ZIP → kéo thả vào ô "Batch ZIP".</div>
       </div>
     </div>
 
@@ -619,8 +858,7 @@ HEADERS    = {<span class="s">"X-API-Key"</span>: <span class="s">"your_api_key"
       <tr><td><span class="method DELETE" style="display:inline-block">DELETE</span></td><td><code>/api/v1/admin/problems/{id}/test-cases/{caseId}</code></td><td>Xóa test case</td></tr>
     </table>
 
-    <!-- Submissions admin -->
-    <p style="font-size:11px;font-weight:700;margin:20px 0 10px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px">SUBMISSIONS (ADMIN)</p>
+    <p class="sub-label">SUBMISSIONS (ADMIN)</p>
     <div class="endpoint">
       <div class="endpoint-header">
         <span class="method GET">GET</span>
@@ -629,22 +867,22 @@ HEADERS    = {<span class="s">"X-API-Key"</span>: <span class="s">"your_api_key"
         <span class="endpoint-desc">Lịch sử tất cả submissions (phân trang)</span>
       </div>
       <div class="endpoint-body">
-        <p style="color:var(--muted);font-size:13.5px;margin-top:12px">Trả về Spring Page — có <code>content[]</code>, <code>totalPages</code>, <code>totalElements</code>, <code>number</code>.</p>
+        <p style="color:var(--muted);font-size:13.5px;margin-top:12px">Trả về Spring Page — <code>content[]</code>, <code>totalPages</code>, <code>totalElements</code>, <code>number</code>.</p>
       </div>
     </div>
 
-    <!-- Full example -->
-    <div class="card" style="margin-top:8px">
+    <div class="card">
       <div class="card-title">Ví dụ đầy đủ: Tạo problem → upload test case → publish</div>
       <div class="code-block" style="margin-top:12px">
         <div class="code-header"><span>bash</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
         <pre><span class="c"># 1. Tạo problem</span>
 curl -X POST http://&lt;server-ip&gt;:8080/api/v1/admin/problems \
   -H <span class="s">"X-API-Key: ADMIN_KEY"</span> -H <span class="s">"Content-Type: application/json"</span> \
-  -d <span class="s">'{"slug":"a-plus-b","title":"A + B","description":"**Cho hai số nguyên...**","descriptionFormat":"MARKDOWN","timeLimitMs":1000,"memoryLimitKb":65536}'</span>
-<span class="c"># → {"id":1,"slug":"a-plus-b","descriptionFormat":"MARKDOWN",...}</span>
+  -d <span class="s">'{"slug":"a-plus-b","title":"A + B","description":"**Cho hai số nguyên...**",
+     "descriptionFormat":"MARKDOWN","difficulty":"easy","tags":["math"],
+     "timeLimitMs":1000,"memoryLimitKb":65536}'</span>
 
-<span class="c"># 2. Upload test case mẫu (isSample=true → dùng được với Test Run)</span>
+<span class="c"># 2. Upload test case mẫu</span>
 curl -X POST http://&lt;server-ip&gt;:8080/api/v1/admin/problems/<span class="n">1</span>/test-cases \
   -H <span class="s">"X-API-Key: ADMIN_KEY"</span> \
   -F <span class="s">"input=@sample.in"</span> -F <span class="s">"output=@sample.out"</span> \
@@ -659,68 +897,50 @@ curl -X POST http://&lt;server-ip&gt;:8080/api/v1/admin/problems/<span class="n"
 
   <!-- Subtasks -->
   <div class="section" id="subtasks">
-    <div class="section-title"><span>🏷️</span>Subtask Scoring</div>
-    <div class="alert info">ℹ️ Subtask nhóm các test case lại. Subtask chỉ được điểm khi <strong>tất cả</strong> test case trong nhóm đều AC (all-or-nothing). Test case không thuộc subtask nào vẫn tính điểm riêng từng case.</div>
+    <div class="section-title"><span>🏷️</span>Admin — Subtask Scoring</div>
+    <div class="alert info">ℹ️ Subtask nhóm test case: chỉ được điểm khi <strong>tất cả</strong> test trong nhóm đều AC (all-or-nothing). Test không thuộc subtask nào tính điểm riêng từng case.</div>
 
-    <p style="font-size:11px;font-weight:700;margin:20px 0 10px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px">CRUD SUBTASKS</p>
     <table style="margin-bottom:20px">
       <tr><th>Method</th><th>Endpoint</th><th>Mô tả</th></tr>
-      <tr><td><span class="method GET" style="display:inline-block">GET</span></td><td><code>/api/v1/admin/problems/{id}/subtasks</code></td><td>Danh sách subtask của problem</td></tr>
+      <tr><td><span class="method GET" style="display:inline-block">GET</span></td><td><code>/api/v1/admin/problems/{id}/subtasks</code></td><td>Danh sách subtask</td></tr>
       <tr><td><span class="method POST" style="display:inline-block">POST</span></td><td><code>/api/v1/admin/problems/{id}/subtasks</code></td><td>Tạo subtask mới</td></tr>
-      <tr><td><span class="method DELETE" style="display:inline-block">DELETE</span></td><td><code>/api/v1/admin/problems/{id}/subtasks/{subtaskId}</code></td><td>Xóa subtask (test case giữ nguyên, không còn subtask)</td></tr>
+      <tr><td><span class="method DELETE" style="display:inline-block">DELETE</span></td><td><code>/api/v1/admin/problems/{id}/subtasks/{subtaskId}</code></td><td>Xóa subtask</td></tr>
     </table>
 
-    <div class="endpoint">
-      <div class="endpoint-header">
-        <span class="method POST">POST</span>
-        <span class="endpoint-path">/api/v1/admin/problems/{id}/subtasks</span>
-        <span class="badge admin">Admin</span>
-        <span class="endpoint-desc">Tạo subtask</span>
-      </div>
-      <div class="endpoint-body">
-        <table style="margin:12px 0 8px">
-          <tr><th>Field</th><th>Type</th><th>Mô tả</th></tr>
-          <tr><td><code>name</code></td><td><code>string</code></td><td>Tên subtask, ví dụ "Subtask 1 — n ≤ 1000"</td></tr>
-          <tr><td><code>score</code></td><td><code>number</code></td><td>Điểm nhận khi pass toàn bộ test trong subtask</td></tr>
-          <tr><td><code>orderIndex</code></td><td><code>number</code></td><td>Thứ tự hiển thị (tùy chọn, tự tăng nếu bỏ)</td></tr>
-        </table>
-        <div class="code-block">
-          <div class="code-header"><span>bash — Ví dụ tạo 2 subtask</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-          <pre><span class="c"># Tạo subtask 1</span>
+    <div class="code-block">
+      <div class="code-header"><span>bash — Tạo 2 subtask + gán test case</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+      <pre><span class="c"># Tạo subtask 1</span>
 curl -X POST http://&lt;server-ip&gt;:8080/api/v1/admin/problems/<span class="n">1</span>/subtasks \
   -H <span class="s">"X-API-Key: ADMIN_KEY"</span> -H <span class="s">"Content-Type: application/json"</span> \
   -d <span class="s">'{"name":"Subtask 1 — n ≤ 1000","score":30}'</span>
-<span class="c"># → {"id":1,"name":"Subtask 1 — n ≤ 1000","score":30,"orderIndex":0}</span>
+<span class="c"># → {"id":1,...}</span>
 
 <span class="c"># Upload test case gán vào subtask 1</span>
 curl -X POST http://&lt;server-ip&gt;:8080/api/v1/admin/problems/<span class="n">1</span>/test-cases \
   -H <span class="s">"X-API-Key: ADMIN_KEY"</span> \
   -F <span class="s">"input=@tc1.in"</span> -F <span class="s">"output=@tc1.out"</span> \
   -F <span class="s">"score=0"</span> -F <span class="s">"subtaskId=1"</span></pre>
-        </div>
-      </div>
     </div>
   </div>
 
   <!-- Checker -->
   <div class="section" id="checker">
-    <div class="section-title"><span>⚖️</span>Custom Checker (Special Judge)</div>
-    <p style="color:var(--muted);font-size:14px;margin-bottom:16px">Mặc định server so sánh output <strong>chính xác từng ký tự</strong> (EXACT). Với bài chấp nhận nhiều đáp án (floating point, sắp xếp tùy ý...) bạn cần custom checker.</p>
-
-    <div class="alert tip">💡 Checker được compile 1 lần và lưu lại. Mỗi lần chấm, checker chạy trong Docker với 3 đối số: <code>&lt;input&gt; &lt;expected&gt; &lt;actual&gt;</code>. Exit code <code>0</code> = AC, khác = WA.</div>
+    <div class="section-title"><span>⚖️</span>Admin — Custom Checker</div>
+    <p style="color:var(--muted);font-size:14px;margin-bottom:16px">Mặc định so sánh output <strong>EXACT</strong>. Với bài floating point hay nhiều đáp án đúng — upload custom checker.</p>
+    <div class="alert tip">💡 Checker chạy trong Docker với 3 đối số: <code>&lt;input&gt; &lt;expected&gt; &lt;actual&gt;</code>. Exit code <code>0</code> = AC, khác = WA.</div>
 
     <div class="endpoint">
       <div class="endpoint-header">
         <span class="method POST">POST</span>
         <span class="endpoint-path">/api/v1/admin/problems/{id}/checker</span>
         <span class="badge admin">Admin</span>
-        <span class="endpoint-desc">Upload & compile checker (multipart)</span>
+        <span class="endpoint-desc">Upload &amp; compile checker (multipart)</span>
       </div>
       <div class="endpoint-body">
         <table style="margin:12px 0 8px">
-          <tr><th>Form field</th><th>Type</th><th>Mô tả</th></tr>
-          <tr><td><code>language</code></td><td><code>string</code></td><td><code>cpp</code> · <code>java</code> · <code>python</code></td></tr>
-          <tr><td><code>source</code></td><td>file</td><td>Source code của checker</td></tr>
+          <tr><th>Form field</th><th>Mô tả</th></tr>
+          <tr><td><code>language</code></td><td><code>cpp</code> · <code>java</code> · <code>python</code></td></tr>
+          <tr><td><code>source</code></td><td>Source code của checker</td></tr>
         </table>
         <div class="code-block">
           <div class="code-header"><span>checker.cpp — so sánh số thực (sai số 1e-6)</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
@@ -734,11 +954,10 @@ curl -X POST http://&lt;server-ip&gt;:8080/api/v1/admin/problems/<span class="n"
 }</pre>
         </div>
         <div class="code-block">
-          <div class="code-header"><span>bash — Upload checker</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+          <div class="code-header"><span>bash</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
           <pre>curl -X POST http://&lt;server-ip&gt;:8080/api/v1/admin/problems/<span class="n">1</span>/checker \
   -H <span class="s">"X-API-Key: ADMIN_KEY"</span> \
-  -F <span class="s">"language=cpp"</span> \
-  -F <span class="s">"source=@checker.cpp"</span></pre>
+  -F <span class="s">"language=cpp"</span> -F <span class="s">"source=@checker.cpp"</span></pre>
         </div>
       </div>
     </div>
@@ -748,40 +967,33 @@ curl -X POST http://&lt;server-ip&gt;:8080/api/v1/admin/problems/<span class="n"
         <span class="method DELETE">DELETE</span>
         <span class="endpoint-path">/api/v1/admin/problems/{id}/checker</span>
         <span class="badge admin">Admin</span>
-        <span class="endpoint-desc">Gỡ checker, chuyển về EXACT match</span>
+        <span class="endpoint-desc">Gỡ checker → trở về EXACT match</span>
       </div>
-      <div class="endpoint-body"><p style="color:var(--muted);font-size:13.5px;margin-top:12px">Trả về <code>ProblemResponse</code> với <code>checkerType: "EXACT"</code>.</p></div>
+      <div class="endpoint-body"><p style="color:var(--muted);font-size:13.5px;margin-top:12px">Trả <code>ProblemResponse</code> với <code>checkerType: "EXACT"</code>.</p></div>
     </div>
   </div>
 
   <!-- Import ZIP -->
   <div class="section" id="import">
-    <div class="section-title"><span>📦</span>Import Problem từ ZIP</div>
-    <p style="color:var(--muted);font-size:14px;margin-bottom:16px">Tạo problem, upload tất cả test case, cấu hình subtask và checker chỉ trong một lần import.</p>
+    <div class="section-title"><span>📦</span>Admin — Import Problem từ ZIP</div>
 
     <div class="endpoint">
       <div class="endpoint-header">
         <span class="method POST">POST</span>
         <span class="endpoint-path">/api/v1/admin/problems/import</span>
         <span class="badge admin">Admin</span>
-        <span class="endpoint-desc">Import problem từ file .zip (multipart)</span>
+        <span class="endpoint-desc">Import problem từ file .zip</span>
       </div>
       <div class="endpoint-body">
-        <table style="margin:12px 0 8px">
-          <tr><th>Form field</th><th>Mô tả</th></tr>
-          <tr><td><code>file</code></td><td>File .zip theo cấu trúc bên dưới</td></tr>
-        </table>
-
-        <p style="font-weight:700;font-size:13px;margin-bottom:8px">Cấu trúc ZIP:</p>
+        <p style="font-weight:700;font-size:13px;margin:12px 0 8px">Cấu trúc ZIP:</p>
         <div class="code-block">
-          <div class="code-header"><span>Cấu trúc thư mục trong ZIP</span></div>
-          <pre><span class="n">problem.yml</span>        <span class="c">← bắt buộc</span>
+          <div class="code-header"><span>Directory layout</span></div>
+          <pre><span class="n">problem.yml</span>
 <span class="n">tests/</span>
-  <span class="s">1.in</span> / <span class="s">1.out</span>      <span class="c">← cặp test (tên tùy ý, cùng basename)</span>
-  <span class="s">2.in</span> / <span class="s">2.out</span>
-  <span class="s">sample1.in</span> / <span class="s">sample1.out</span>  <span class="c">← tên bắt đầu "sample"/"ex" → tự mark isSample</span>
-<span class="n">subtasks.yml</span>       <span class="c">← tùy chọn</span>
-<span class="n">checker.cpp</span>        <span class="c">← tùy chọn (tự compile)</span></pre>
+  <span class="s">1.in</span> / <span class="s">1.out</span>
+  <span class="s">sample1.in</span> / <span class="s">sample1.out</span>   <span class="c">← "sample"/"ex" prefix → tự mark isSample</span>
+<span class="n">subtasks.yml</span>          <span class="c">← tùy chọn</span>
+<span class="n">checker.cpp</span>           <span class="c">← tùy chọn</span></pre>
         </div>
 
         <p style="font-weight:700;font-size:13px;margin:16px 0 8px"><code>problem.yml</code></p>
@@ -789,18 +1001,20 @@ curl -X POST http://&lt;server-ip&gt;:8080/api/v1/admin/problems/<span class="n"
           <div class="code-header"><span>YAML</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
           <pre><span class="n">slug</span>: <span class="s">a-plus-b</span>
 <span class="n">title</span>: <span class="s">"A + B Problem"</span>
-<span class="n">description</span>: <span class="s">"Nhập hai số nguyên a, b. In ra a+b."</span>
-<span class="n">description_format</span>: <span class="s">MARKDOWN</span>   <span class="c"># tùy chọn: MARKDOWN (mặc định) | HTML</span>
+<span class="n">description</span>: <span class="s">"## Đề bài\nNhập hai số nguyên a, b. In ra **a+b**."</span>
+<span class="n">description_format</span>: <span class="s">MARKDOWN</span>   <span class="c"># MARKDOWN (mặc định) | HTML</span>
 <span class="n">timeLimitMs</span>: <span class="v">1000</span>
-<span class="n">memoryLimitKb</span>: <span class="v">262144</span></pre>
+<span class="n">memoryLimitKb</span>: <span class="v">262144</span>
+<span class="n">difficulty</span>: <span class="s">easy</span>              <span class="c"># easy | medium | hard</span>
+<span class="n">tags</span>: [<span class="s">math</span>, <span class="s">implementation</span>]</pre>
         </div>
 
-        <p style="font-weight:700;font-size:13px;margin:16px 0 8px"><code>subtasks.yml</code> (nếu có)</p>
+        <p style="font-weight:700;font-size:13px;margin:16px 0 8px"><code>subtasks.yml</code></p>
         <div class="code-block">
           <div class="code-header"><span>YAML</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
           <pre>- <span class="n">name</span>: <span class="s">"Subtask 1 — n ≤ 100"</span>
   <span class="n">score</span>: <span class="v">30</span>
-  <span class="n">tests</span>: [<span class="s">"1"</span>, <span class="s">"2"</span>]      <span class="c"># tên file không kèm đuôi</span>
+  <span class="n">tests</span>: [<span class="s">"1"</span>, <span class="s">"2"</span>]
 
 - <span class="n">name</span>: <span class="s">"Subtask 2 — n ≤ 10^9"</span>
   <span class="n">score</span>: <span class="v">70</span>
@@ -809,15 +1023,61 @@ curl -X POST http://&lt;server-ip&gt;:8080/api/v1/admin/problems/<span class="n"
 
         <div class="code-block">
           <div class="code-header"><span>bash</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-          <pre><span class="c"># Nén và import</span>
-cd my-problem && zip -r ../my-problem.zip .
+          <pre>cd my-problem && zip -r ../my-problem.zip .
 
 curl -X POST http://&lt;server-ip&gt;:8080/api/v1/admin/problems/import \
   -H <span class="s">"X-API-Key: ADMIN_KEY"</span> \
   -F <span class="s">"file=@my-problem.zip"</span></pre>
         </div>
+      </div>
+    </div>
+  </div>
 
-        <div class="alert tip">💡 Hoặc dùng Admin Panel → Problems → <strong>📦 Import ZIP</strong> — có preview nội dung ZIP trước khi import.</div>
+  <!-- Admin Contests -->
+  <div class="section" id="admin-contests">
+    <div class="section-title"><span>🗓️</span>Admin — Contests</div>
+
+    <table style="margin-bottom:20px">
+      <tr><th>Method</th><th>Endpoint</th><th>Mô tả</th></tr>
+      <tr><td><span class="method POST" style="display:inline-block">POST</span></td><td><code>/api/v1/admin/contests</code></td><td>Tạo contest mới</td></tr>
+      <tr><td><span class="method PUT" style="display:inline-block">PUT</span></td><td><code>/api/v1/admin/contests/{id}</code></td><td>Cập nhật contest</td></tr>
+      <tr><td><span class="method POST" style="display:inline-block">POST</span></td><td><code>/api/v1/admin/contests/{id}/problems</code></td><td>Thêm bài vào contest</td></tr>
+      <tr><td><span class="method DELETE" style="display:inline-block">DELETE</span></td><td><code>/api/v1/admin/contests/{id}/problems/{problemId}</code></td><td>Gỡ bài khỏi contest</td></tr>
+    </table>
+
+    <div class="endpoint">
+      <div class="endpoint-header">
+        <span class="method POST">POST</span>
+        <span class="endpoint-path">/api/v1/admin/contests</span>
+        <span class="badge admin">Admin</span>
+        <span class="endpoint-desc">Tạo contest</span>
+      </div>
+      <div class="endpoint-body">
+        <table style="margin:12px 0 8px">
+          <tr><th>Field</th><th>Type</th><th>Mô tả</th></tr>
+          <tr><td><code>slug</code></td><td><code>string</code></td><td>Slug duy nhất — <strong>bắt buộc</strong></td></tr>
+          <tr><td><code>title</code></td><td><code>string</code></td><td>Tên contest — <strong>bắt buộc</strong></td></tr>
+          <tr><td><code>startTime</code></td><td><code>ISO 8601</code></td><td>Thời gian bắt đầu</td></tr>
+          <tr><td><code>endTime</code></td><td><code>ISO 8601</code></td><td>Thời gian kết thúc</td></tr>
+          <tr><td><code>isPublic</code></td><td><code>boolean</code></td><td>Hiển thị công khai (mặc định false)</td></tr>
+        </table>
+        <div class="code-block">
+          <div class="code-header"><span>bash — Tạo contest + thêm bài + đăng ký</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+          <pre><span class="c"># Tạo contest</span>
+curl -X POST http://&lt;server-ip&gt;:8080/api/v1/admin/contests \
+  -H <span class="s">"X-API-Key: ADMIN_KEY"</span> -H <span class="s">"Content-Type: application/json"</span> \
+  -d <span class="s">'{"slug":"round-1","title":"Round 1",
+     "startTime":"2026-05-01T09:00:00","endTime":"2026-05-01T12:00:00","isPublic":true}'</span>
+<span class="c"># → {"id":1,"slug":"round-1","status":"UPCOMING",...}</span>
+
+<span class="c"># Thêm bài A (problemId=1)</span>
+curl -X POST http://&lt;server-ip&gt;:8080/api/v1/admin/contests/<span class="n">1</span>/problems \
+  -H <span class="s">"X-API-Key: ADMIN_KEY"</span> -H <span class="s">"Content-Type: application/json"</span> \
+  -d <span class="s">'{"problemId":1,"alias":"A","orderIndex":1}'</span>
+
+<span class="c"># Thí sinh đăng ký (không cần key)</span>
+curl -X POST <span class="s">"http://&lt;server-ip&gt;:8080/api/v1/contests/round-1/register?userRef=alice"</span></pre>
+        </div>
       </div>
     </div>
   </div>
@@ -825,10 +1085,10 @@ curl -X POST http://&lt;server-ip&gt;:8080/api/v1/admin/problems/import \
   <!-- Webhook -->
   <div class="section" id="webhook">
     <div class="section-title"><span>🔔</span>Webhook</div>
-    <p style="color:var(--muted);font-size:14px;margin-bottom:16px">Truyền <code>callbackUrl</code> khi nộp bài. Sau khi chấm xong, server POST kết quả về URL đó. <strong>Test Run không gửi webhook.</strong></p>
+    <p style="color:var(--muted);font-size:14px;margin-bottom:16px">Truyền <code>callbackUrl</code> khi nộp bài. Sau khi chấm xong, server POST kết quả về URL đó.</p>
 
     <div class="code-block">
-      <div class="code-header"><span>Payload — POST đến callbackUrl của bạn</span></div>
+      <div class="code-header"><span>Payload — POST đến callbackUrl</span></div>
       <pre>{
   <span class="p">"submissionId"</span>: <span class="s">"sub_39a8bdc114"</span>,
   <span class="p">"status"</span>:       <span class="s">"AC"</span>,
@@ -840,7 +1100,7 @@ curl -X POST http://&lt;server-ip&gt;:8080/api/v1/admin/problems/import \
 
     <div class="card">
       <div class="card-title">Xác minh chữ ký HMAC-SHA256</div>
-      <p style="font-size:13.5px;color:var(--muted);margin-bottom:12px">Header <code>X-Judge-Signature</code> — HMAC-SHA256 của payload, key là chính <code>callbackUrl</code> của bạn.</p>
+      <p style="font-size:13.5px;color:var(--muted);margin-bottom:12px">Header <code>X-Judge-Signature</code> — HMAC-SHA256 của payload, key là chính <code>callbackUrl</code>.</p>
       <div class="code-block">
         <div class="code-header"><span>Node.js</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
         <pre><span class="k">const</span> crypto = require(<span class="s">'crypto'</span>);
@@ -872,7 +1132,7 @@ curl -X POST http://&lt;server-ip&gt;:8080/api/v1/admin/problems/import \
 
   <!-- Errors -->
   <div class="section" id="errors">
-    <div class="section-title"><span>🚫</span>Lỗi & Rate limit</div>
+    <div class="section-title"><span>🚫</span>Lỗi &amp; Rate limit</div>
     <table style="margin-bottom:20px">
       <tr><th>HTTP</th><th>Code</th><th>Nguyên nhân</th></tr>
       <tr><td><code>401</code></td><td><code>UNAUTHORIZED</code></td><td>Thiếu hoặc sai <code>X-API-Key</code></td></tr>
@@ -903,7 +1163,7 @@ X-RateLimit-Reset:     <span class="s">2026-04-17T10:00:00Z</span></pre>
       <tr><td><code>python</code></td><td>Python</td><td>Python 3.12-slim</td><td><code>solution.py</code></td></tr>
     </table>
     <div class="alert info" style="margin-top:16px">ℹ️ Java: class phải tên là <strong>Solution</strong> (có method <code>main</code>).</div>
-    <div class="alert tip" style="margin-top:8px">💡 Ngôn ngữ được cấu hình trong <code>application.yml</code>. Có thể thêm ngôn ngữ mới, đổi Docker image mà không cần sửa code Java. → <a href="/languages.html" style="color:var(--accent2);font-weight:700">Xem hướng dẫn chi tiết + config sẵn cho Go, Rust, C, Node.js, Ruby, PHP, Kotlin ↗</a></div>
+    <div class="alert tip" style="margin-top:8px">💡 Ngôn ngữ config trong <code>application.yml</code> — thêm ngôn ngữ mới không cần sửa code Java.</div>
     <div class="code-block" style="margin-top:12px">
       <div class="code-header"><span>application.yml — ví dụ thêm Go</span></div>
       <pre>judge:
@@ -918,7 +1178,7 @@ X-RateLimit-Reset:     <span class="s">2026-04-17T10:00:00Z</span></pre>
       <div class="card-title">Sandbox constraints (mỗi lần chạy)</div>
       <ul style="margin-top:8px">
         <li><strong>Network:</strong> Bị chặn hoàn toàn (<code>--network none</code>)</li>
-        <li><strong>CPU:</strong> 0.5 core, hard limit theo <code>timeLimitMs</code> của problem</li>
+        <li><strong>CPU:</strong> 0.5 core, hard timeout theo <code>timeLimitMs</code> của problem</li>
         <li><strong>Memory:</strong> Giới hạn theo <code>memoryLimitKb</code> của problem</li>
         <li><strong>PID:</strong> Tối đa 64 processes</li>
         <li><strong>Filesystem:</strong> Read-only, chỉ <code>/tmp</code> (64 MB) là writable</li>

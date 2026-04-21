@@ -29,6 +29,12 @@ public class AdminProblemController {
 
     // ─── Problem CRUD ───────────────────────────────────────────────────────
 
+    @GetMapping("/{id}")
+    public ResponseEntity<ProblemResponse> getById(@PathVariable Long id) {
+        requireAdmin();
+        return ResponseEntity.ok(problemService.getById(id));
+    }
+
     @PostMapping
     public ResponseEntity<ProblemResponse> create(@RequestBody @Valid ProblemRequest req) {
         requireAdmin();

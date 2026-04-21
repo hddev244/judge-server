@@ -190,6 +190,8 @@ code{font-family:var(--mono);font-size:12px;background:var(--surface2);padding:2
     <div class="nav-item" data-page="submissions"><span class="ni">📤</span>Submissions</div>
     <div class="nav-item" data-page="apikeys"><span class="ni">🔑</span>API Keys</div>
     <div class="nav-item" data-page="contests"><span class="ni">🏅</span>Contests</div>
+    <div class="nav-item" data-page="topics"><span class="ni">🏷</span>Topics</div>
+    <div class="nav-item" data-page="categories"><span class="ni">📂</span>Categories</div>
   </nav>
   <div class="sidebar-foot">Judge Server v1 · <a href="/docs.html" target="_blank" style="color:var(--accent)">Docs</a> · <a href="/languages.html" target="_blank" style="color:var(--accent2)">Languages</a> · <a href="/leaderboard.html" target="_blank" style="color:#f59e0b">Leaderboard</a></div>
 </aside>
@@ -226,7 +228,7 @@ code{font-family:var(--mono);font-size:12px;background:var(--surface2);padding:2
       <div><div class="page-title">Problems</div><div class="page-sub">Quản lý bài toán</div></div>
       <div style="display:flex;gap:8px">
         <button class="btn btn-ghost" onclick="openModal('modal-import')">📦 Import ZIP</button>
-        <button class="btn btn-primary" onclick="openModal('modal-problem')">+ Tạo problem</button>
+        <button class="btn btn-primary" onclick="openCreateProblemModal()">+ Tạo problem</button>
       </div>
     </div>
     <div class="table-wrap">
@@ -282,6 +284,34 @@ code{font-family:var(--mono);font-size:12px;background:var(--surface2);padding:2
     </div>
   </div>
 
+  <!-- Topics -->
+  <div class="page" id="page-topics">
+    <div class="page-header">
+      <div><div class="page-title">Topics (Chủ đề)</div><div class="page-sub">Phân loại bài toán theo chủ đề thuật toán</div></div>
+      <button class="btn btn-primary" onclick="openModal('modal-create-topic')">+ Tạo topic</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>ID</th><th>Name</th><th>Slug</th><th>Problems</th><th>Actions</th></tr></thead>
+        <tbody id="topics-body"><tr><td colspan="5"><div class="empty"><p>Đang tải...</p></div></td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Categories -->
+  <div class="page" id="page-categories">
+    <div class="page-header">
+      <div><div class="page-title">Categories (Phân loại)</div><div class="page-sub">Phân loại bài toán theo dạng đề</div></div>
+      <button class="btn btn-primary" onclick="openModal('modal-create-category')">+ Tạo category</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>ID</th><th>Name</th><th>Slug</th><th>Problems</th><th>Actions</th></tr></thead>
+        <tbody id="categories-body"><tr><td colspan="5"><div class="empty"><p>Đang tải...</p></div></td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
 </main>
 </div>
 
@@ -311,6 +341,14 @@ code{font-family:var(--mono);font-size:12px;background:var(--surface2);padding:2
         </select>
       </div>
       <div class="form-group"><label>Tags <span style="font-size:11px;color:var(--muted)">(phân cách bởi dấu phẩy)</span></label><input id="p-tags" placeholder="dp, greedy, sorting"/></div>
+    </div>
+    <div class="form-group">
+      <label>Topics <span style="font-size:11px;color:var(--muted)">(giữ Ctrl/Cmd để chọn nhiều)</span></label>
+      <select id="p-topics" multiple style="height:90px"></select>
+    </div>
+    <div class="form-group">
+      <label>Categories <span style="font-size:11px;color:var(--muted)">(giữ Ctrl/Cmd để chọn nhiều)</span></label>
+      <select id="p-categories" multiple style="height:90px"></select>
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('modal-problem')">Hủy</button>
@@ -344,6 +382,14 @@ code{font-family:var(--mono);font-size:12px;background:var(--surface2);padding:2
         </select>
       </div>
       <div class="form-group"><label>Tags <span style="font-size:11px;color:var(--muted)">(phân cách bởi dấu phẩy)</span></label><input id="ep-tags" placeholder="dp, greedy, sorting"/></div>
+    </div>
+    <div class="form-group">
+      <label>Topics <span style="font-size:11px;color:var(--muted)">(giữ Ctrl/Cmd để chọn nhiều)</span></label>
+      <select id="ep-topics" multiple style="height:90px"></select>
+    </div>
+    <div class="form-group">
+      <label>Categories <span style="font-size:11px;color:var(--muted)">(giữ Ctrl/Cmd để chọn nhiều)</span></label>
+      <select id="ep-categories" multiple style="height:90px"></select>
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('modal-edit-problem')">Hủy</button>
@@ -595,6 +641,104 @@ code{font-family:var(--mono);font-size:12px;background:var(--surface2);padding:2
   </div>
 </div>
 
+<!-- Create Topic -->
+<div class="modal-backdrop" id="modal-create-topic">
+  <div class="modal">
+    <h3>🏷 Tạo Topic mới</h3>
+    <div class="form-group"><label>Name <span style="color:var(--red)">*</span></label><input id="tp-name" placeholder="Dynamic Programming"/></div>
+    <div class="form-group"><label>Slug <span style="color:var(--red)">*</span></label><input id="tp-slug" placeholder="dynamic-programming"/></div>
+    <div class="form-group"><label>Description</label><textarea id="tp-desc" placeholder="Mô tả chủ đề..."></textarea></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-create-topic')">Hủy</button>
+      <button class="btn btn-primary" id="btn-create-topic" onclick="createTopic()">Tạo</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Topic -->
+<div class="modal-backdrop" id="modal-edit-topic">
+  <div class="modal">
+    <h3>✏️ Chỉnh sửa Topic</h3>
+    <input type="hidden" id="etp-id"/>
+    <div class="form-group"><label>Name <span style="color:var(--red)">*</span></label><input id="etp-name"/></div>
+    <div class="form-group"><label>Slug <span style="color:var(--red)">*</span></label><input id="etp-slug"/></div>
+    <div class="form-group"><label>Description</label><textarea id="etp-desc"></textarea></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-edit-topic')">Hủy</button>
+      <button class="btn btn-primary" onclick="updateTopic()">Lưu</button>
+    </div>
+  </div>
+</div>
+
+<!-- Manage Topic Problems -->
+<div class="modal-backdrop" id="modal-topic-problems">
+  <div class="modal" style="max-width:640px">
+    <h3>📚 Problems in Topic — <span id="tpp-topic-title"></span></h3>
+    <input type="hidden" id="tpp-topic-id"/>
+    <div id="tpp-list" style="margin-bottom:16px"></div>
+    <div style="border-top:1px solid var(--border);padding-top:16px">
+      <div style="font-size:13px;font-weight:700;margin-bottom:10px">Thêm problem vào topic</div>
+      <div id="tpp-problem-select" style="max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:8px;background:var(--surface2)"></div>
+      <div style="margin-top:10px;display:flex;gap:8px;align-items:center">
+        <input id="tpp-search" placeholder="Tìm kiếm problem..." style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:7px 12px;color:var(--text);font-size:13px;outline:none" oninput="filterTopicProblems()"/>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-topic-problems')">Đóng</button>
+      <button class="btn btn-primary" onclick="addProblemsToTopic()">+ Thêm đã chọn</button>
+    </div>
+  </div>
+</div>
+
+<!-- Create Category -->
+<div class="modal-backdrop" id="modal-create-category">
+  <div class="modal">
+    <h3>📂 Tạo Category mới</h3>
+    <div class="form-group"><label>Name <span style="color:var(--red)">*</span></label><input id="ct-name" placeholder="Graph Theory"/></div>
+    <div class="form-group"><label>Slug <span style="color:var(--red)">*</span></label><input id="ct-slug" placeholder="graph-theory"/></div>
+    <div class="form-group"><label>Description</label><textarea id="ct-desc" placeholder="Mô tả phân loại..."></textarea></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-create-category')">Hủy</button>
+      <button class="btn btn-primary" id="btn-create-category" onclick="createCategory()">Tạo</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Category -->
+<div class="modal-backdrop" id="modal-edit-category">
+  <div class="modal">
+    <h3>✏️ Chỉnh sửa Category</h3>
+    <input type="hidden" id="ect-id"/>
+    <div class="form-group"><label>Name <span style="color:var(--red)">*</span></label><input id="ect-name"/></div>
+    <div class="form-group"><label>Slug <span style="color:var(--red)">*</span></label><input id="ect-slug"/></div>
+    <div class="form-group"><label>Description</label><textarea id="ect-desc"></textarea></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-edit-category')">Hủy</button>
+      <button class="btn btn-primary" onclick="updateCategory()">Lưu</button>
+    </div>
+  </div>
+</div>
+
+<!-- Manage Category Problems -->
+<div class="modal-backdrop" id="modal-category-problems">
+  <div class="modal" style="max-width:640px">
+    <h3>📚 Problems in Category — <span id="cpp-cat-title"></span></h3>
+    <input type="hidden" id="cpp-cat-id"/>
+    <div id="cpp-list" style="margin-bottom:16px"></div>
+    <div style="border-top:1px solid var(--border);padding-top:16px">
+      <div style="font-size:13px;font-weight:700;margin-bottom:10px">Thêm problem vào category</div>
+      <div id="cpp-problem-select" style="max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:8px;background:var(--surface2)"></div>
+      <div style="margin-top:10px">
+        <input id="cpp-search" placeholder="Tìm kiếm problem..." style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:7px 12px;color:var(--text);font-size:13px;outline:none" oninput="filterCategoryProblems()"/>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-category-problems')">Đóng</button>
+      <button class="btn btn-primary" onclick="addProblemsToCategory()">+ Thêm đã chọn</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <script>
@@ -628,6 +772,8 @@ function loadCurrentPage() {
   if (active === 'submissions') loadSubmissions(0);
   if (active === 'apikeys')     loadApiKeys();
   if (active === 'contests')    loadContests();
+  if (active === 'topics')      loadTopics();
+  if (active === 'categories')  loadCategories();
 }
 
 // ─── API helper ─────────────────────────────────────────────────
@@ -759,7 +905,9 @@ async function createProblem() {
         timeLimitMs: +document.getElementById('p-time').value,
         memoryLimitKb: +document.getElementById('p-mem').value,
         difficulty: diff || null,
-        tags: parseTags(document.getElementById('p-tags').value)
+        tags: parseTags(document.getElementById('p-tags').value),
+        topicIds: getSelectedIds('p-topics'),
+        categoryIds: getSelectedIds('p-categories')
       })
     });
     closeModal('modal-problem');
@@ -770,11 +918,13 @@ async function createProblem() {
     document.getElementById('p-mem').value = 262144;
     document.getElementById('p-desc-format').value = 'MARKDOWN';
     document.getElementById('p-difficulty').value = '';
+    clearMultiSelect('p-topics');
+    clearMultiSelect('p-categories');
   } catch(e) { toast('Lỗi: ' + e.message, 'error'); }
   finally { btn.disabled = false; btn.textContent = 'Tạo'; }
 }
 
-function openEdit(id, slug, title, desc, time, mem, format, difficulty, tags) {
+async function openEdit(id, slug, title, desc, time, mem, format, difficulty, tags) {
   document.getElementById('ep-id').value = id;
   document.getElementById('ep-slug').value = slug;
   document.getElementById('ep-title').value = title;
@@ -784,6 +934,22 @@ function openEdit(id, slug, title, desc, time, mem, format, difficulty, tags) {
   document.getElementById('ep-desc-format').value = format || 'MARKDOWN';
   document.getElementById('ep-difficulty').value = difficulty || '';
   document.getElementById('ep-tags').value = (tags || []).join(', ');
+
+  try {
+    const [topics, categories, problem] = await Promise.all([
+      api('/api/v1/admin/topics'),
+      api('/api/v1/admin/categories'),
+      api(`/api/v1/admin/problems/${id}`)
+    ]);
+    const selTopicIds = (problem.topics || []).map(t => t.id);
+    const selCatIds = (problem.categories || []).map(c => c.id);
+    populateMultiSelect('ep-topics', topics.map(t => ({id: t.id, label: t.name})), selTopicIds);
+    populateMultiSelect('ep-categories', categories.map(c => ({id: c.id, label: c.name})), selCatIds);
+  } catch(e) {
+    populateMultiSelect('ep-topics', [], []);
+    populateMultiSelect('ep-categories', [], []);
+  }
+
   openModal('modal-edit-problem');
 }
 
@@ -802,7 +968,9 @@ async function updateProblem() {
         timeLimitMs: +document.getElementById('ep-time').value,
         memoryLimitKb: +document.getElementById('ep-mem').value,
         difficulty: diff || null,
-        tags: parseTags(document.getElementById('ep-tags').value)
+        tags: parseTags(document.getElementById('ep-tags').value),
+        topicIds: getSelectedIds('ep-topics'),
+        categoryIds: getSelectedIds('ep-categories')
       })
     });
     closeModal('modal-edit-problem');
@@ -1569,6 +1737,355 @@ async function refreshContestProblems(contestId) {
       document.getElementById('cp-order').value = (c.problems||[]).length;
     }
   } catch(e) {}
+}
+
+// ─── Multi-select helpers ────────────────────────────────────────
+function populateMultiSelect(id, items, selectedIds = []) {
+  const sel = document.getElementById(id);
+  sel.innerHTML = items.map(item =>
+    `<option value="${item.id}" ${selectedIds.includes(item.id) ? 'selected' : ''}>${escHtml(item.label)}</option>`
+  ).join('');
+}
+
+function getSelectedIds(id) {
+  const sel = document.getElementById(id);
+  return Array.from(sel.selectedOptions).map(o => +o.value);
+}
+
+function clearMultiSelect(id) {
+  const sel = document.getElementById(id);
+  Array.from(sel.options).forEach(o => o.selected = false);
+}
+
+async function openCreateProblemModal() {
+  try {
+    const [topics, categories] = await Promise.all([
+      api('/api/v1/admin/topics'),
+      api('/api/v1/admin/categories')
+    ]);
+    populateMultiSelect('p-topics', topics.map(t => ({id: t.id, label: t.name})), []);
+    populateMultiSelect('p-categories', categories.map(c => ({id: c.id, label: c.name})), []);
+  } catch(e) {
+    populateMultiSelect('p-topics', [], []);
+    populateMultiSelect('p-categories', [], []);
+  }
+  openModal('modal-problem');
+}
+
+// ─── Topics ──────────────────────────────────────────────────────
+let allProblemsCache = [];
+
+async function loadTopics() {
+  if (!apiKey) return;
+  try {
+    const list = await api('/api/v1/admin/topics');
+    const rows = list.length ? list.map(t => `
+      <tr>
+        <td>${t.id}</td>
+        <td><strong>${escHtml(t.name)}</strong>${t.description ? `<br><span style="font-size:12px;color:var(--muted)">${escHtml(t.description)}</span>` : ''}</td>
+        <td><code>${t.slug}</code></td>
+        <td><span class="badge badge-blue">${(t.problems||[]).length}</span></td>
+        <td style="display:flex;gap:5px">
+          <button class="btn btn-ghost btn-sm" onclick="openEditTopic(${t.id},'${escAttr(t.name)}','${escAttr(t.slug)}','${escAttr(t.description||'')}')">✏️</button>
+          <button class="btn btn-ghost btn-sm" onclick="openTopicProblems(${t.id},'${escAttr(t.name)}',${JSON.stringify(t.problems||[])})">📚 Problems</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteTopic(${t.id})">🗑</button>
+        </td>
+      </tr>`).join('')
+      : '<tr><td colspan="5"><div class="empty"><div class="empty-icon">🏷</div><p>Chưa có topic nào</p></div></td></tr>';
+    document.getElementById('topics-body').innerHTML = rows;
+  } catch(e) { toast('Lỗi tải topics: ' + e.message, 'error'); }
+}
+
+async function createTopic() {
+  const btn = document.getElementById('btn-create-topic');
+  btn.disabled = true; btn.innerHTML = '<span class="spin"></span>';
+  try {
+    await api('/api/v1/admin/topics', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        name: document.getElementById('tp-name').value.trim(),
+        slug: document.getElementById('tp-slug').value.trim(),
+        description: document.getElementById('tp-desc').value.trim() || null
+      })
+    });
+    closeModal('modal-create-topic');
+    ['tp-name','tp-slug','tp-desc'].forEach(id => document.getElementById(id).value = '');
+    toast('Tạo topic thành công!', 'success');
+    loadTopics();
+  } catch(e) { toast('Lỗi: ' + e.message, 'error'); }
+  finally { btn.disabled = false; btn.textContent = 'Tạo'; }
+}
+
+function openEditTopic(id, name, slug, desc) {
+  document.getElementById('etp-id').value = id;
+  document.getElementById('etp-name').value = name;
+  document.getElementById('etp-slug').value = slug;
+  document.getElementById('etp-desc').value = (desc||'').replace(/\\n/g,'\n');
+  openModal('modal-edit-topic');
+}
+
+async function updateTopic() {
+  const id = document.getElementById('etp-id').value;
+  try {
+    await api(`/api/v1/admin/topics/${id}`, {
+      method: 'PUT', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        name: document.getElementById('etp-name').value.trim(),
+        slug: document.getElementById('etp-slug').value.trim(),
+        description: document.getElementById('etp-desc').value.trim() || null
+      })
+    });
+    closeModal('modal-edit-topic');
+    toast('Cập nhật thành công!', 'success');
+    loadTopics();
+  } catch(e) { toast('Lỗi: ' + e.message, 'error'); }
+}
+
+async function deleteTopic(id) {
+  if (!confirm('Xóa topic này? Các bài toán sẽ không còn thuộc topic này.')) return;
+  try {
+    await api(`/api/v1/admin/topics/${id}`, { method: 'DELETE' });
+    toast('Đã xóa topic', 'success');
+    loadTopics();
+  } catch(e) { toast('Lỗi: ' + e.message, 'error'); }
+}
+
+let topicProblemsInTopic = [];
+
+async function openTopicProblems(topicId, topicName, problems) {
+  document.getElementById('tpp-topic-id').value = topicId;
+  document.getElementById('tpp-topic-title').textContent = topicName;
+  topicProblemsInTopic = problems.map(p => p.id);
+  renderTopicProblemList(topicId, problems);
+  openModal('modal-topic-problems');
+  await loadAllProblemsForSelect();
+  renderTopicProblemSelectList('');
+}
+
+function renderTopicProblemList(topicId, problems) {
+  const html = problems.length
+    ? `<div class="table-wrap"><table>
+        <thead><tr><th>ID</th><th>Slug</th><th>Title</th><th></th></tr></thead>
+        <tbody>${problems.map(p => `
+          <tr>
+            <td>${p.id}</td>
+            <td><code style="font-size:11px">${escHtml(p.slug)}</code></td>
+            <td>${escHtml(p.title)}</td>
+            <td><button class="btn btn-danger btn-sm" onclick="removeProblemFromTopic(${topicId},${p.id})">🗑</button></td>
+          </tr>`).join('')}
+        </tbody></table></div>`
+    : '<div class="alert alert-info" style="font-size:12px">Chưa có problem nào trong topic này.</div>';
+  document.getElementById('tpp-list').innerHTML = html;
+}
+
+async function loadAllProblemsForSelect() {
+  if (allProblemsCache.length > 0) return;
+  try {
+    const data = await api('/api/v1/admin/problems?page=0&size=200');
+    allProblemsCache = data.content || [];
+  } catch(e) {}
+}
+
+function filterTopicProblems() {
+  renderTopicProblemSelectList(document.getElementById('tpp-search').value);
+}
+
+function renderTopicProblemSelectList(query) {
+  const q = (query||'').toLowerCase();
+  const filtered = allProblemsCache.filter(p =>
+    !topicProblemsInTopic.includes(p.id) &&
+    (p.slug.includes(q) || p.title.toLowerCase().includes(q))
+  );
+  const html = filtered.length
+    ? filtered.map(p => `
+        <label style="display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:6px;cursor:pointer;font-size:13px" class="hover-row">
+          <input type="checkbox" value="${p.id}" style="accent-color:var(--accent)"/>
+          <span><code style="font-size:11px">${escHtml(p.slug)}</code> — ${escHtml(p.title)}</span>
+        </label>`).join('')
+    : '<div style="font-size:12px;color:var(--muted);padding:6px">Không có problem nào để thêm.</div>';
+  document.getElementById('tpp-problem-select').innerHTML = html;
+}
+
+async function addProblemsToTopic() {
+  const tid = document.getElementById('tpp-topic-id').value;
+  const ids = Array.from(document.querySelectorAll('#tpp-problem-select input:checked')).map(c => +c.value);
+  if (!ids.length) { toast('Chọn ít nhất một problem', 'error'); return; }
+  try {
+    const t = await api(`/api/v1/admin/topics/${tid}/problems`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ problemIds: ids })
+    });
+    topicProblemsInTopic = (t.problems||[]).map(p => p.id);
+    renderTopicProblemList(+tid, t.problems||[]);
+    renderTopicProblemSelectList(document.getElementById('tpp-search').value);
+    toast('Thêm problems thành công!', 'success');
+    loadTopics();
+  } catch(e) { toast('Lỗi: ' + e.message, 'error'); }
+}
+
+async function removeProblemFromTopic(topicId, problemId) {
+  if (!confirm('Gỡ problem này khỏi topic?')) return;
+  try {
+    const t = await api(`/api/v1/admin/topics/${topicId}/problems/${problemId}`, { method: 'DELETE' });
+    topicProblemsInTopic = (t.problems||[]).map(p => p.id);
+    renderTopicProblemList(topicId, t.problems||[]);
+    renderTopicProblemSelectList(document.getElementById('tpp-search').value);
+    toast('Đã gỡ problem', 'success');
+    loadTopics();
+  } catch(e) { toast('Lỗi: ' + e.message, 'error'); }
+}
+
+// ─── Categories ──────────────────────────────────────────────────
+let catProblemsInCat = [];
+
+async function loadCategories() {
+  if (!apiKey) return;
+  try {
+    const list = await api('/api/v1/admin/categories');
+    const rows = list.length ? list.map(c => `
+      <tr>
+        <td>${c.id}</td>
+        <td><strong>${escHtml(c.name)}</strong>${c.description ? `<br><span style="font-size:12px;color:var(--muted)">${escHtml(c.description)}</span>` : ''}</td>
+        <td><code>${c.slug}</code></td>
+        <td><span class="badge badge-blue">${(c.problems||[]).length}</span></td>
+        <td style="display:flex;gap:5px">
+          <button class="btn btn-ghost btn-sm" onclick="openEditCategory(${c.id},'${escAttr(c.name)}','${escAttr(c.slug)}','${escAttr(c.description||'')}')">✏️</button>
+          <button class="btn btn-ghost btn-sm" onclick="openCategoryProblems(${c.id},'${escAttr(c.name)}',${JSON.stringify(c.problems||[])})">📚 Problems</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteCategory(${c.id})">🗑</button>
+        </td>
+      </tr>`).join('')
+      : '<tr><td colspan="5"><div class="empty"><div class="empty-icon">📂</div><p>Chưa có category nào</p></div></td></tr>';
+    document.getElementById('categories-body').innerHTML = rows;
+  } catch(e) { toast('Lỗi tải categories: ' + e.message, 'error'); }
+}
+
+async function createCategory() {
+  const btn = document.getElementById('btn-create-category');
+  btn.disabled = true; btn.innerHTML = '<span class="spin"></span>';
+  try {
+    await api('/api/v1/admin/categories', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        name: document.getElementById('ct-name').value.trim(),
+        slug: document.getElementById('ct-slug').value.trim(),
+        description: document.getElementById('ct-desc').value.trim() || null
+      })
+    });
+    closeModal('modal-create-category');
+    ['ct-name','ct-slug','ct-desc'].forEach(id => document.getElementById(id).value = '');
+    toast('Tạo category thành công!', 'success');
+    loadCategories();
+  } catch(e) { toast('Lỗi: ' + e.message, 'error'); }
+  finally { btn.disabled = false; btn.textContent = 'Tạo'; }
+}
+
+function openEditCategory(id, name, slug, desc) {
+  document.getElementById('ect-id').value = id;
+  document.getElementById('ect-name').value = name;
+  document.getElementById('ect-slug').value = slug;
+  document.getElementById('ect-desc').value = (desc||'').replace(/\\n/g,'\n');
+  openModal('modal-edit-category');
+}
+
+async function updateCategory() {
+  const id = document.getElementById('ect-id').value;
+  try {
+    await api(`/api/v1/admin/categories/${id}`, {
+      method: 'PUT', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        name: document.getElementById('ect-name').value.trim(),
+        slug: document.getElementById('ect-slug').value.trim(),
+        description: document.getElementById('ect-desc').value.trim() || null
+      })
+    });
+    closeModal('modal-edit-category');
+    toast('Cập nhật thành công!', 'success');
+    loadCategories();
+  } catch(e) { toast('Lỗi: ' + e.message, 'error'); }
+}
+
+async function deleteCategory(id) {
+  if (!confirm('Xóa category này?')) return;
+  try {
+    await api(`/api/v1/admin/categories/${id}`, { method: 'DELETE' });
+    toast('Đã xóa category', 'success');
+    loadCategories();
+  } catch(e) { toast('Lỗi: ' + e.message, 'error'); }
+}
+
+async function openCategoryProblems(catId, catName, problems) {
+  document.getElementById('cpp-cat-id').value = catId;
+  document.getElementById('cpp-cat-title').textContent = catName;
+  catProblemsInCat = problems.map(p => p.id);
+  renderCategoryProblemList(catId, problems);
+  openModal('modal-category-problems');
+  await loadAllProblemsForSelect();
+  renderCategoryProblemSelectList('');
+}
+
+function renderCategoryProblemList(catId, problems) {
+  const html = problems.length
+    ? `<div class="table-wrap"><table>
+        <thead><tr><th>ID</th><th>Slug</th><th>Title</th><th></th></tr></thead>
+        <tbody>${problems.map(p => `
+          <tr>
+            <td>${p.id}</td>
+            <td><code style="font-size:11px">${escHtml(p.slug)}</code></td>
+            <td>${escHtml(p.title)}</td>
+            <td><button class="btn btn-danger btn-sm" onclick="removeProblemFromCategory(${catId},${p.id})">🗑</button></td>
+          </tr>`).join('')}
+        </tbody></table></div>`
+    : '<div class="alert alert-info" style="font-size:12px">Chưa có problem nào trong category này.</div>';
+  document.getElementById('cpp-list').innerHTML = html;
+}
+
+function filterCategoryProblems() {
+  renderCategoryProblemSelectList(document.getElementById('cpp-search').value);
+}
+
+function renderCategoryProblemSelectList(query) {
+  const q = (query||'').toLowerCase();
+  const filtered = allProblemsCache.filter(p =>
+    !catProblemsInCat.includes(p.id) &&
+    (p.slug.includes(q) || p.title.toLowerCase().includes(q))
+  );
+  const html = filtered.length
+    ? filtered.map(p => `
+        <label style="display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:6px;cursor:pointer;font-size:13px">
+          <input type="checkbox" value="${p.id}" style="accent-color:var(--accent)"/>
+          <span><code style="font-size:11px">${escHtml(p.slug)}</code> — ${escHtml(p.title)}</span>
+        </label>`).join('')
+    : '<div style="font-size:12px;color:var(--muted);padding:6px">Không có problem nào để thêm.</div>';
+  document.getElementById('cpp-problem-select').innerHTML = html;
+}
+
+async function addProblemsToCategory() {
+  const cid = document.getElementById('cpp-cat-id').value;
+  const ids = Array.from(document.querySelectorAll('#cpp-problem-select input:checked')).map(c => +c.value);
+  if (!ids.length) { toast('Chọn ít nhất một problem', 'error'); return; }
+  try {
+    const c = await api(`/api/v1/admin/categories/${cid}/problems`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ problemIds: ids })
+    });
+    catProblemsInCat = (c.problems||[]).map(p => p.id);
+    renderCategoryProblemList(+cid, c.problems||[]);
+    renderCategoryProblemSelectList(document.getElementById('cpp-search').value);
+    toast('Thêm problems thành công!', 'success');
+    loadCategories();
+  } catch(e) { toast('Lỗi: ' + e.message, 'error'); }
+}
+
+async function removeProblemFromCategory(catId, problemId) {
+  if (!confirm('Gỡ problem này khỏi category?')) return;
+  try {
+    const c = await api(`/api/v1/admin/categories/${catId}/problems/${problemId}`, { method: 'DELETE' });
+    catProblemsInCat = (c.problems||[]).map(p => p.id);
+    renderCategoryProblemList(catId, c.problems||[]);
+    renderCategoryProblemSelectList(document.getElementById('cpp-search').value);
+    toast('Đã gỡ problem', 'success');
+    loadCategories();
+  } catch(e) { toast('Lỗi: ' + e.message, 'error'); }
 }
 
 // ─── Boot ────────────────────────────────────────────────────────

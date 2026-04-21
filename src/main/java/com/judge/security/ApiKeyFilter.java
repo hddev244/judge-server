@@ -23,6 +23,8 @@ public class ApiKeyFilter extends OncePerRequestFilter {
             "/*.html", "/**.html",
             "/api/v1/leaderboard", "/api/v1/users/*/stats",
             "/api/v1/contests", "/api/v1/contests/**",
+            "/api/v1/topics", "/api/v1/topics/**",
+            "/api/v1/categories", "/api/v1/categories/**",
             "/ws/**"
     );
 

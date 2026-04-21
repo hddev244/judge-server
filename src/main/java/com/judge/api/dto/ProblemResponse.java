@@ -1,8 +1,10 @@
 package com.judge.api.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.judge.domain.Category;
 import com.judge.domain.Problem;
 import com.judge.domain.ProblemTag;
+import com.judge.domain.Topic;
 import lombok.Builder;
 import lombok.Data;
 
@@ -23,6 +25,8 @@ public class ProblemResponse {
     private boolean isPublished;
     private String difficulty;
     private List<String> tags;
+    private List<TopicInfo> topics;
+    private List<CategoryInfo> categories;
     private Long solvedCount;
     private Double acceptanceRate;
     private String checkerType;
@@ -31,14 +35,45 @@ public class ProblemResponse {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
+    @Data @Builder
+    public static class TopicInfo {
+        private Long id;
+        private String name;
+        private String slug;
+    }
+
+    @Data @Builder
+    public static class CategoryInfo {
+        private Long id;
+        private String name;
+        private String slug;
+    }
+
     public static ProblemResponse from(Problem p) {
         List<String> tags = p.getTags() != null
                 ? p.getTags().stream().map(ProblemTag::getTag).toList()
                 : List.of();
-        return from(p, tags);
+        List<TopicInfo> topics = p.getTopics() != null
+                ? p.getTopics().stream()
+                    .map(t -> TopicInfo.builder().id(t.getId()).name(t.getName()).slug(t.getSlug()).build())
+                    .sorted(java.util.Comparator.comparing(TopicInfo::getId))
+                    .toList()
+                : List.of();
+        List<CategoryInfo> categories = p.getCategories() != null
+                ? p.getCategories().stream()
+                    .map(c -> CategoryInfo.builder().id(c.getId()).name(c.getName()).slug(c.getSlug()).build())
+                    .sorted(java.util.Comparator.comparing(CategoryInfo::getId))
+                    .toList()
+                : List.of();
+        return from(p, tags, topics, categories);
     }
 
     public static ProblemResponse from(Problem p, List<String> tags) {
+        return from(p, tags, List.of(), List.of());
+    }
+
+    public static ProblemResponse from(Problem p, List<String> tags,
+                                        List<TopicInfo> topics, List<CategoryInfo> categories) {
         return ProblemResponse.builder()
                 .id(p.getId())
                 .slug(p.getSlug())
@@ -50,6 +85,8 @@ public class ProblemResponse {
                 .isPublished(p.isPublished())
                 .difficulty(p.getDifficulty())
                 .tags(tags)
+                .topics(topics)
+                .categories(categories)
                 .solvedCount(p.getSolvedCount())
                 .acceptanceRate(p.getAcceptanceRate())
                 .checkerType(p.getCheckerType())
