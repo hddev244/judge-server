@@ -7,6 +7,7 @@ import com.judge.judge.JudgeService;
 import com.judge.queue.JudgeQueueService;
 import com.judge.service.SubmissionService;
 import jakarta.validation.Valid;
+import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -36,6 +37,16 @@ public class SubmissionController {
     @PostMapping("/test")
     public ResponseEntity<SubmissionResponse> test(@RequestBody @Valid TestRunRequest req) {
         return ResponseEntity.ok(judgeService.runTest(req));
+    }
+
+    @GetMapping
+    public ResponseEntity<Page<SubmissionResponse>> list(
+            @RequestParam(required = false) String problemSlug,
+            @RequestParam(required = false) String userRef,
+            @RequestParam(required = false) String status,
+            @RequestParam(defaultValue = "0")  int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(submissionService.list(problemSlug, userRef, status, page, size));
     }
 
     @GetMapping("/{id}")

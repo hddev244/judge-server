@@ -9,6 +9,9 @@ import com.judge.exception.JudgeException;
 import com.judge.repository.ProblemRepository;
 import com.judge.repository.SubmissionRepository;
 import com.judge.security.ApiKeyContext;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -65,5 +68,13 @@ public class SubmissionService {
         Submission submission = submissionRepository.findByIdWithResults(id)
                 .orElseThrow(() -> JudgeException.notFound("Submission not found: " + id));
         return SubmissionResponse.from(submission);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<SubmissionResponse> list(String problemSlug, String userRef, String status, int page, int size) {
+        return submissionRepository.findByFilters(
+                problemSlug, userRef, status,
+                PageRequest.of(page, Math.min(size, 100), Sort.by("createdAt").descending())
+        ).map(SubmissionResponse::from);
     }
 }

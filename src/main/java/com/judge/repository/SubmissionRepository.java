@@ -67,4 +67,18 @@ public interface SubmissionRepository extends JpaRepository<Submission, String> 
     @Query("SELECT s FROM Submission s WHERE s.userRef = :userRef AND s.isTestRun = false ORDER BY s.createdAt DESC")
     List<Submission> findRecentByUserRef(@Param("userRef") String userRef,
                                           org.springframework.data.domain.Pageable pageable);
+
+    @Query("""
+            SELECT s FROM Submission s
+            WHERE s.isTestRun = false
+              AND (:problemSlug IS NULL OR s.problem.slug = :problemSlug)
+              AND (:userRef     IS NULL OR s.userRef     = :userRef)
+              AND (:status      IS NULL OR s.status      = :status)
+            ORDER BY s.createdAt DESC
+            """)
+    org.springframework.data.domain.Page<Submission> findByFilters(
+            @Param("problemSlug") String problemSlug,
+            @Param("userRef")     String userRef,
+            @Param("status")      String status,
+            org.springframework.data.domain.Pageable pageable);
 }
