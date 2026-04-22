@@ -42,7 +42,7 @@ X-API-Key: <your_api_key>
 
 | Quyền | Điều kiện | Ví dụ endpoint |
 |-------|-----------|----------------|
-| Public | Không cần key | `/api/v1/leaderboard`, `/api/v1/contests`, WebSocket |
+| Public | Không cần key | `/api/v1/leaderboard`, `/api/v1/contests`, `/api/v1/topics`, `/api/v1/categories`, WebSocket |
 | User | Key hợp lệ bất kỳ | Submit bài, xem submission |
 | Admin | Key có `is_admin = true` | Tạo/sửa problem, quản lý contest, API keys |
 
@@ -138,8 +138,8 @@ Sau đó trong FE React gọi `/api/judge/v1/problems` thay vì trực tiếp ju
 ### 4.1 Problems
 
 ```http
-# Danh sách problems (có filter)
-GET /api/v1/problems?q=&tags=dp,greedy&difficulty=medium&page=0&size=20
+# Danh sách problems (tất cả params optional, kết hợp tùy ý)
+GET /api/v1/problems?q=tổng&tags=dp,greedy&difficulty=medium&topicSlug=dp&categorySlug=graph-theory&page=0&size=20
 
 # Response
 {
@@ -148,19 +148,20 @@ GET /api/v1/problems?q=&tags=dp,greedy&difficulty=medium&page=0&size=20
     "slug": "a-plus-b",
     "title": "A + B",
     "description": "...",
-    "descriptionFormat": "MARKDOWN",   // hoặc "HTML"
+    "descriptionFormat": "MARKDOWN",
     "timeLimitMs": 1000,
     "memoryLimitKb": 262144,
-    "difficulty": "easy",              // "easy" | "medium" | "hard" | null
+    "difficulty": "easy",
     "tags": ["math"],
-    "published": true,
+    "topics": [{ "id": 1, "name": "Dynamic Programming", "slug": "dp" }],
+    "categories": [{ "id": 1, "name": "Graph Theory", "slug": "graph-theory" }],
+    "isPublished": true,
     "solvedCount": 42,
     "acceptanceRate": 78.5,
-    "checkerType": "EXACT"             // "EXACT" | "CUSTOM"
+    "checkerType": "EXACT"
   }],
   "totalElements": 100,
-  "totalPages": 5,
-  "number": 0,
+  "page": 0,
   "size": 20
 }
 
@@ -177,7 +178,9 @@ POST /api/v1/admin/problems
   "timeLimitMs": 1000,
   "memoryLimitKb": 262144,
   "difficulty": "easy",
-  "tags": ["math", "basic"]
+  "tags": ["math", "basic"],
+  "topicIds": [1, 2],       // optional — gán vào topics
+  "categoryIds": [1]        // optional — gán vào categories
 }
 
 # [Admin] Publish
@@ -313,7 +316,52 @@ GET /api/v1/users/{userRef}/stats
 }
 ```
 
-### 4.5 API Keys (Admin)
+### 4.5 Topics & Categories
+
+```http
+# [Public] Danh sách topics (không cần API key)
+GET /api/v1/topics
+GET /api/v1/topics/{slug}
+
+# [Public] Danh sách categories
+GET /api/v1/categories
+GET /api/v1/categories/{slug}
+
+# Response
+[{
+  "id": 1,
+  "name": "Dynamic Programming",
+  "slug": "dp",
+  "description": "...",
+  "problemCount": 5,
+  "problems": [{ "id": 1, "slug": "a-plus-b", "title": "A + B", "difficulty": "easy" }],
+  "createdAt": "2026-04-21T14:16:16"
+}]
+
+# [Admin] Tạo topic / category
+POST /api/v1/admin/topics
+POST /api/v1/admin/categories
+{ "name": "Dynamic Programming", "slug": "dp", "description": "..." }
+
+# [Admin] Sửa
+PUT /api/v1/admin/topics/{id}
+PUT /api/v1/admin/categories/{id}
+
+# [Admin] Xóa
+DELETE /api/v1/admin/topics/{id}
+DELETE /api/v1/admin/categories/{id}
+
+# [Admin] Thêm problems vào topic/category
+POST /api/v1/admin/topics/{id}/problems
+POST /api/v1/admin/categories/{id}/problems
+{ "problemIds": [1, 2, 3] }
+
+# [Admin] Gỡ problem khỏi topic/category
+DELETE /api/v1/admin/topics/{id}/problems/{problemId}
+DELETE /api/v1/admin/categories/{id}/problems/{problemId}
+```
+
+### 4.6 API Keys (Admin)
 
 ```http
 # Tạo API key
@@ -529,7 +577,208 @@ HTTP 429 Too Many Requests
 
 ---
 
-## 12. Ví dụ tham khảo trong repo
+## 12. Kết nối từ Backend Server khác (Server-to-Server)
+
+Dành cho các hệ thống muốn dùng Judge Server như một **dịch vụ chấm bài từ xa** — backend A gửi submission, nhận verdict qua webhook hoặc polling.
+
+### Luồng tổng quát
+
+```
+Backend A                        Judge Server
+    │                                │
+    │  1. POST /api/v1/submissions   │
+    │     X-API-Key: sk_xxx          │
+    │     { problemId, lang, code,   │
+    │       callbackUrl }            │
+    │───────────────────────────────>│
+    │  { submissionId: "sub_abc" }   │
+    │<───────────────────────────────│
+    │                                │  [async: compile + Docker sandbox]
+    │  2. POST <callbackUrl>         │
+    │  { status:"AC", score:100, … } │
+    │<───────────────────────────────│
+    │  200 OK (không retry nếu 2xx)  │
+    │───────────────────────────────>│
+```
+
+### Setup
+
+**1. Tạo API key cho backend A:**
+
+```bash
+curl -X POST http://<judge-host>:8433/api/v1/admin/api-keys \
+  -H "X-API-Key: <admin_key>" -H "Content-Type: application/json" \
+  -d '{"clientName":"backend-a","rateLimitPerHour":2000,"isAdmin":false}'
+# Nhận: { "key": "sk_xxxxxxxxx" }
+```
+
+Lưu key vào biến môi trường, không bao giờ để trong source code hay trả về client.
+
+**2. Gửi submission:**
+
+```bash
+curl -X POST http://<judge-host>:8433/api/v1/submissions \
+  -H "X-API-Key: $JUDGE_API_KEY" -H "Content-Type: application/json" \
+  -d '{
+    "problemId": 1,
+    "language": "cpp",
+    "sourceCode": "...",
+    "userRef": "user-uuid-123",
+    "callbackUrl": "https://your-backend.com/api/judge-callback"
+  }'
+```
+
+**3. Nhận callback:**
+
+```
+POST https://your-backend.com/api/judge-callback
+Content-Type: application/json
+
+{
+  "submissionId": "sub_abc123",
+  "status": "AC",          // AC|WA|TLE|MLE|RE|CE|SE
+  "score": 100,
+  "timeMs": 45,
+  "userRef": "user-uuid-123",
+  "testResults": [
+    { "testCaseId": 1, "status": "AC", "timeMs": 45, "memoryKb": 2048 }
+  ],
+  "errorMessage": null,
+  "finishedAt": "2026-04-22T09:00:00"
+}
+```
+
+> Callback endpoint **phải trả HTTP 2xx**. Nếu không, judge server retry tự động với backoff.
+
+### Ví dụ theo ngôn ngữ
+
+**Node.js**
+
+```js
+// .env: JUDGE_BASE_URL=http://...:8433  JUDGE_API_KEY=sk_xxx
+const headers = {
+  'X-API-Key': process.env.JUDGE_API_KEY,
+  'Content-Type': 'application/json',
+};
+
+async function submit(problemId, language, sourceCode, userRef) {
+  const res = await fetch(`${process.env.JUDGE_BASE_URL}/api/v1/submissions`, {
+    method: 'POST', headers,
+    body: JSON.stringify({
+      problemId, language, sourceCode, userRef,
+      callbackUrl: `${process.env.APP_URL}/api/judge-callback`,
+    }),
+  });
+  return res.json(); // { submissionId, status: "PENDING" }
+}
+
+// Express webhook handler
+app.post('/api/judge-callback', express.json(), async (req, res) => {
+  const { submissionId, status, score, userRef, testResults } = req.body;
+  await db.submissions.update({ submissionId }, { status, score, testResults });
+  // notify user via WebSocket, email, etc.
+  res.sendStatus(200); // phải trả 2xx
+});
+```
+
+**Python (FastAPI)**
+
+```python
+import os, httpx
+
+JUDGE_BASE = os.environ['JUDGE_BASE_URL']
+JUDGE_KEY  = os.environ['JUDGE_API_KEY']
+HEADERS    = {'X-API-Key': JUDGE_KEY, 'Content-Type': 'application/json'}
+
+async def submit(problem_id: int, language: str, source_code: str, user_ref: str):
+    async with httpx.AsyncClient() as client:
+        r = await client.post(f'{JUDGE_BASE}/api/v1/submissions', headers=HEADERS, json={
+            'problemId': problem_id, 'language': language, 'sourceCode': source_code,
+            'userRef': user_ref,
+            'callbackUrl': f"{os.environ['APP_URL']}/api/judge-callback",
+        })
+        r.raise_for_status()
+        return r.json()  # { submissionId, status }
+
+@app.post('/api/judge-callback')
+async def judge_callback(payload: dict):
+    sub_id = payload['submissionId']
+    status = payload['status']
+    score  = payload.get('score', 0)
+    # cập nhật DB, push notification cho user...
+    return {'ok': True}  # 2xx để judge không retry
+```
+
+**Spring Boot (RestTemplate/WebClient)**
+
+```java
+@Service
+public class JudgeClient {
+    @Value("${judge.base-url}") private String baseUrl;
+    @Value("${judge.api-key}")  private String apiKey;
+    private final RestTemplate rest = new RestTemplate();
+
+    public String submit(Long problemId, String language, String sourceCode, String userRef) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("X-API-Key", apiKey);
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        Map<String, Object> body = Map.of(
+            "problemId", problemId, "language", language,
+            "sourceCode", sourceCode, "userRef", userRef,
+            "callbackUrl", appUrl + "/api/judge-callback"
+        );
+        ResponseEntity<Map> res = rest.exchange(
+            baseUrl + "/api/v1/submissions",
+            HttpMethod.POST, new HttpEntity<>(body, headers), Map.class
+        );
+        return (String) res.getBody().get("submissionId");
+    }
+}
+
+@RestController
+public class JudgeCallbackController {
+    @PostMapping("/api/judge-callback")
+    public ResponseEntity<Void> callback(@RequestBody Map<String, Object> payload) {
+        String subId  = (String) payload.get("submissionId");
+        String status = (String) payload.get("status");
+        // lưu DB, notify user...
+        return ResponseEntity.ok().build(); // 2xx bắt buộc
+    }
+}
+```
+
+### Không có callbackUrl — dùng polling
+
+```js
+async function waitForResult(submissionId, intervalMs = 1000, timeoutMs = 30000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const r = await fetch(`${JUDGE_BASE}/api/v1/submissions/${submissionId}`, { headers });
+    const data = await r.json();
+    if (!['PENDING', 'JUDGING'].includes(data.status)) return data;
+    await new Promise(resolve => setTimeout(resolve, intervalMs));
+  }
+  throw new Error('Timeout waiting for judge result');
+}
+```
+
+### Lấy danh sách bài theo chủ đề (để hiển thị trong backend A)
+
+```bash
+# Tất cả params optional
+GET /api/v1/problems?topicSlug=dp&categorySlug=graph-theory&difficulty=medium&page=0&size=20
+# Không cần API key nếu endpoint được public — cần key nếu bạn config bảo vệ
+
+# Danh sách topics
+GET /api/v1/topics          # public, không cần key
+
+# Danh sách categories
+GET /api/v1/categories      # public, không cần key
+```
+
+---
+
+## 13. Ví dụ tham khảo trong repo
 
 ```
 examples/

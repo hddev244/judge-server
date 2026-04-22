@@ -13,6 +13,7 @@
 - **Custom checker** — special judge: compile checker C++/Java/Python, chạy với `<input> <expected> <actual>`
 - **Import problem từ ZIP** — `problem.yml` + `tests/*.in/*.out` + `subtasks.yml` + `checker.cpp`
 - **Problem tags & difficulty** — gán tags (dp, greedy, ...) và độ khó (easy/medium/hard), tìm kiếm/lọc
+- **Topics & Categories** — phân loại bài theo chủ đề và dạng đề, lọc kết hợp trong search
 - **Contest mode** — tạo contest, đăng ký thí sinh, submit theo contest, bảng điểm với penalty
 - **Leaderboard** — xếp hạng global theo số bài solved, cache 5 phút
 - **User stats** — profile từng user: bài đã giải, tỷ lệ AC, ngôn ngữ dùng, submission gần đây
@@ -184,19 +185,250 @@ REST endpoint `GET /api/v1/submissions/{id}` vẫn hoạt động bình thườn
 ## Problem Search
 
 ```bash
-# Lọc theo tags (AND semantics), độ khó, từ khóa, phân trang
-GET /api/v1/problems?tags=dp,greedy&difficulty=medium&q=sort&page=0&size=20
+# Tất cả params đều optional, có thể kết hợp tùy ý
+GET /api/v1/problems?q=tổng&tags=dp,greedy&difficulty=medium&topicSlug=dp&categorySlug=graph-theory&page=0&size=20
+```
 
-# Response:
+| Param | Ví dụ | Mô tả |
+|-------|-------|-------|
+| `q` | `tổng` | Tìm theo title (case-insensitive) |
+| `tags` | `dp,greedy` | Tags — AND semantics |
+| `difficulty` | `easy` | `easy` / `medium` / `hard` |
+| `topicSlug` | `dp` | Slug của topic |
+| `categorySlug` | `graph-theory` | Slug của category |
+| `page` | `0` | Trang (bắt đầu từ 0) |
+| `size` | `20` | Số bài/trang (tối đa 100) |
+
+```json
 {
-  "content": [{ "id","slug","title","difficulty","tags","solvedCount","acceptanceRate",... }],
-  "totalElements": 42,
-  "page": 0,
-  "size": 20
+  "content": [{
+    "id": 1, "slug": "a-plus-b", "title": "A + B",
+    "difficulty": "easy", "tags": ["math"],
+    "topics": [{ "id": 1, "name": "Dynamic Programming", "slug": "dp" }],
+    "categories": [{ "id": 1, "name": "Graph Theory", "slug": "graph-theory" }],
+    "solvedCount": 42, "acceptanceRate": 78.5
+  }],
+  "totalElements": 42, "page": 0, "size": 20
 }
 ```
 
 `tags=dp,greedy` trả về bài có **đồng thời** cả tag `dp` lẫn `greedy`.
+
+## Topics & Categories
+
+```bash
+# [Public] Danh sách topics
+GET /api/v1/topics
+GET /api/v1/topics/{slug}
+
+# [Public] Danh sách categories
+GET /api/v1/categories
+GET /api/v1/categories/{slug}
+
+# [Admin] Tạo topic
+POST /api/v1/admin/topics
+{ "name": "Dynamic Programming", "slug": "dp", "description": "..." }
+
+# [Admin] Thêm problems vào topic
+POST /api/v1/admin/topics/{id}/problems
+{ "problemIds": [1, 2, 3] }
+
+# [Admin] Tương tự với categories
+POST /api/v1/admin/categories
+POST /api/v1/admin/categories/{id}/problems
+```
+
+Khi tạo/cập nhật problem có thể gán đồng thời:
+
+```json
+{
+  "slug": "a-plus-b",
+  "topicIds": [1, 2],
+  "categoryIds": [1]
+}
+```
+
+---
+
+## Kết nối từ Backend Server khác
+
+Đây là cách tích hợp Judge Server vào **server backend A** (Node.js, Python, Spring, Go, ...) để gửi bài chấm và nhận kết quả.
+
+### Bước 1 — Tạo API Key
+
+```bash
+# Qua admin.html → API Keys → Tạo API Key
+# Hoặc trực tiếp qua API (cần admin key)
+curl -X POST http://<judge-host>:8433/api/v1/admin/api-keys \
+  -H "X-API-Key: <admin_key>" \
+  -H "Content-Type: application/json" \
+  -d '{"clientName": "backend-a", "rateLimitPerHour": 1000, "isAdmin": false}'
+# → nhận { "key": "sk_xxxxxxxx" }
+```
+
+Lưu key vào biến môi trường server-side, **không commit lên git**, **không trả về browser**.
+
+### Bước 2 — Gửi bài chấm
+
+```bash
+curl -X POST http://<judge-host>:8433/api/v1/submissions \
+  -H "X-API-Key: sk_xxxxxxxx" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "problemId": 1,
+    "language": "cpp",
+    "sourceCode": "#include<bits/stdc++.h>\nint main(){int a,b;cin>>a>>b;cout<<a+b;}",
+    "userRef": "user-123",
+    "callbackUrl": "https://backend-a.example.com/judge/callback"
+  }'
+# → { "submissionId": "sub_abc123", "status": "PENDING" }
+```
+
+### Bước 3 — Nhận kết quả
+
+**Cách A — Webhook (khuyến nghị cho server-to-server)**
+
+Khi chấm xong, judge server gọi `callbackUrl` của bạn:
+
+```json
+POST https://backend-a.example.com/judge/callback
+{
+  "submissionId": "sub_abc123",
+  "status": "AC",
+  "score": 100,
+  "timeMs": 45,
+  "testResults": [
+    { "testCaseId": 1, "status": "AC", "timeMs": 45, "memoryKb": 2048 }
+  ],
+  "errorMessage": null
+}
+```
+
+Judge server tự retry nếu callback thất bại (HTTP ≠ 2xx), với backoff tăng dần.
+
+**Cách B — Polling**
+
+```bash
+# Poll đến khi status không còn là PENDING/JUDGING
+curl http://<judge-host>:8433/api/v1/submissions/sub_abc123 \
+  -H "X-API-Key: sk_xxxxxxxx"
+```
+
+**Cách C — WebSocket (từ browser, không cần key)**
+
+```js
+// Browser kết nối trực tiếp đến judge server, không qua proxy
+const client = new Client({
+  webSocketFactory: () => new SockJS('http://<judge-host>:8433/ws'),
+  onConnect: () => {
+    client.subscribe('/topic/submissions/sub_abc123', (msg) => {
+      const { status, score, testResults } = JSON.parse(msg.body);
+      if (!['PENDING','JUDGING'].includes(status)) client.deactivate();
+    });
+  },
+});
+client.activate();
+```
+
+### Ví dụ Node.js / Express
+
+```js
+// judgeClient.js
+const JUDGE_BASE = process.env.JUDGE_BASE_URL; // http://<host>:8433
+const JUDGE_KEY  = process.env.JUDGE_API_KEY;
+
+async function submit({ problemId, language, sourceCode, userRef, callbackUrl }) {
+  const res = await fetch(`${JUDGE_BASE}/api/v1/submissions`, {
+    method: 'POST',
+    headers: { 'X-API-Key': JUDGE_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ problemId, language, sourceCode, userRef, callbackUrl }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json(); // { submissionId, status }
+}
+
+async function getResult(submissionId) {
+  const res = await fetch(`${JUDGE_BASE}/api/v1/submissions/${submissionId}`, {
+    headers: { 'X-API-Key': JUDGE_KEY },
+  });
+  return res.json();
+}
+
+module.exports = { submit, getResult };
+```
+
+```js
+// router.js — nhận callback từ judge
+app.post('/judge/callback', express.json(), (req, res) => {
+  const { submissionId, status, score, testResults } = req.body;
+  // Lưu kết quả vào DB của backend A, thông báo cho user...
+  res.sendStatus(200); // phải trả 2xx để judge server không retry
+});
+```
+
+### Ví dụ Python
+
+```python
+import os, requests
+
+JUDGE_BASE = os.environ['JUDGE_BASE_URL']
+JUDGE_KEY  = os.environ['JUDGE_API_KEY']
+HEADERS    = {'X-API-Key': JUDGE_KEY, 'Content-Type': 'application/json'}
+
+def submit(problem_id, language, source_code, user_ref=None, callback_url=None):
+    r = requests.post(f'{JUDGE_BASE}/api/v1/submissions', headers=HEADERS, json={
+        'problemId': problem_id, 'language': language, 'sourceCode': source_code,
+        'userRef': user_ref, 'callbackUrl': callback_url,
+    })
+    r.raise_for_status()
+    return r.json()  # {'submissionId': 'sub_...', 'status': 'PENDING'}
+
+def get_result(submission_id):
+    r = requests.get(f'{JUDGE_BASE}/api/v1/submissions/{submission_id}', headers=HEADERS)
+    r.raise_for_status()
+    return r.json()
+```
+
+### Luồng server-to-server đầy đủ
+
+```
+Backend A                        Judge Server
+    │                                │
+    │  POST /api/v1/submissions      │
+    │  X-API-Key: sk_xxx             │
+    │  { problemId, lang, code,      │
+    │    callbackUrl: /callback }    │
+    │───────────────────────────────>│
+    │  { submissionId: "sub_abc" }   │
+    │<───────────────────────────────│
+    │                                │  [async judge in Docker sandbox]
+    │                                │
+    │  POST /callback                │
+    │  { status: "AC", score: 100 }  │
+    │<───────────────────────────────│
+    │  200 OK                        │
+    │───────────────────────────────>│
+```
+
+### Các endpoint Backend A hay dùng
+
+| Mục đích | Method | Endpoint |
+|----------|--------|----------|
+| Gửi bài chấm | `POST` | `/api/v1/submissions` |
+| Lấy kết quả | `GET` | `/api/v1/submissions/{id}` |
+| Lọc submissions | `GET` | `/api/v1/submissions?problemSlug=&userRef=&status=&page=&size=` |
+| Test run (không lưu) | `POST` | `/api/v1/submissions/test` |
+| Danh sách bài | `GET` | `/api/v1/problems?topicSlug=&categorySlug=&difficulty=&tags=&page=&size=` |
+| Chi tiết bài | `GET` | `/api/v1/problems/{slug}` |
+| Danh sách topics | `GET` | `/api/v1/topics` |
+| Danh sách categories | `GET` | `/api/v1/categories` |
+| User stats | `GET` | `/api/v1/users/{userRef}/stats` |
+| Leaderboard | `GET` | `/api/v1/leaderboard?limit=&offset=` |
+| Health check | `GET` | `/actuator/health` |
+
+> Xem đầy đủ tại [`AI_AGENTS.md`](./AI_AGENTS.md).
+
+---
 
 ## Leaderboard & User Stats
 
