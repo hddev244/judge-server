@@ -876,7 +876,10 @@ async function loadProblems(page = 0) {
           <button class="btn btn-ghost btn-sm" onclick="openTestCases(${p.id},'${p.title.replace(/'/g,"\\'")}')">🧪</button>
           <button class="btn btn-ghost btn-sm" onclick="openChecker(${p.id},'${p.title.replace(/'/g,"\\'")}','${p.checkerType||'EXACT'}','${p.checkerLanguage||'cpp'}')">⚖️</button>
           <button class="btn btn-ghost btn-sm" onclick="openEdit(${p.id},'${p.slug}','${p.title.replace(/'/g,"\\'")}','${(p.description||'').replace(/'/g,"\\'").replace(/\n/g,'\\n')}',${p.timeLimitMs},${p.memoryLimitKb},'${p.descriptionFormat||'MARKDOWN'}','${p.difficulty||''}',${JSON.stringify(p.tags||[])})">✏️</button>
-          ${!p.published ? `<button class="btn btn-success btn-sm" onclick="publishProblem(${p.id})">Publish</button>` : ''}
+          ${!p.published
+            ? `<button class="btn btn-success btn-sm" onclick="publishProblem(${p.id})">Publish</button>`
+            : `<button class="btn btn-ghost btn-sm" onclick="unpublishProblem(${p.id})" title="Ẩn bài">🙈 Ẩn</button>`}
+          <button class="btn btn-danger btn-sm" onclick="deleteProblem(${p.id},'${p.title.replace(/'/g,"\\'")}')">🗑 Xóa</button>
         </td>
       </tr>`).join('')
       : '<tr><td colspan="7"><div class="empty"><div class="empty-icon">📚</div><p>Chưa có problem nào</p></div></td></tr>';
@@ -984,6 +987,24 @@ async function publishProblem(id) {
   try {
     await api(`/api/v1/admin/problems/${id}/publish`, { method: 'POST' });
     toast('Published!', 'success');
+    loadProblems(problemsPage);
+  } catch(e) { toast('Lỗi: ' + e.message, 'error'); }
+}
+
+async function unpublishProblem(id) {
+  if (!confirm('Ẩn problem này? Người dùng sẽ không thể xem hoặc submit bài này cho đến khi publish lại.')) return;
+  try {
+    await api(`/api/v1/admin/problems/${id}/unpublish`, { method: 'POST' });
+    toast('Đã ẩn problem.', 'success');
+    loadProblems(problemsPage);
+  } catch(e) { toast('Lỗi: ' + e.message, 'error'); }
+}
+
+async function deleteProblem(id, title) {
+  if (!confirm(`Xóa vĩnh viễn "${title}"?\n\nHành động này sẽ xóa toàn bộ test cases, subtasks và không thể khôi phục.`)) return;
+  try {
+    await api(`/api/v1/admin/problems/${id}`, { method: 'DELETE' });
+    toast('Đã xóa problem.', 'success');
     loadProblems(problemsPage);
   } catch(e) { toast('Lỗi: ' + e.message, 'error'); }
 }

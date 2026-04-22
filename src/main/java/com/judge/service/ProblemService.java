@@ -147,6 +147,24 @@ public class ProblemService {
         return ProblemResponse.from(problemRepository.save(problem));
     }
 
+    @Transactional
+    public ProblemResponse unpublish(Long id) {
+        Problem problem = getOrThrow(id);
+        problem.setPublished(false);
+        return ProblemResponse.from(problemRepository.save(problem));
+    }
+
+    @Transactional
+    public void deleteProblem(Long id) {
+        Problem problem = getOrThrow(id);
+        List<TestCase> testCases = testCaseRepository.findByProblemIdOrderByOrderIndexAsc(id);
+        testCases.forEach(tc -> {
+            tryDelete(tc.getInputPath());
+            tryDelete(tc.getOutputPath());
+        });
+        problemRepository.delete(problem);
+    }
+
     // ─── Subtask CRUD ──────────────────────────────────────────────────────────
 
     @Transactional

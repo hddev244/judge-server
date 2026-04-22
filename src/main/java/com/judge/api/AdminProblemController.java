@@ -54,6 +54,19 @@ public class AdminProblemController {
         return ResponseEntity.ok(problemService.publish(id));
     }
 
+    @PostMapping("/{id}/unpublish")
+    public ResponseEntity<ProblemResponse> unpublish(@PathVariable Long id) {
+        requireAdmin();
+        return ResponseEntity.ok(problemService.unpublish(id));
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> delete(@PathVariable Long id) {
+        requireAdmin();
+        problemService.deleteProblem(id);
+        return ResponseEntity.noContent().build();
+    }
+
     // ─── Import ─────────────────────────────────────────────────────────────
 
     @PostMapping(value = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
