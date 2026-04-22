@@ -28,7 +28,7 @@ public class SubmissionResponse {
     public static SubmissionResponse from(Submission s) {
         List<TestResultDto> results = s.getResults() == null ? Collections.emptyList() :
                 s.getResults().stream().map(r -> TestResultDto.builder()
-                        .testCaseId(r.getTestCase().getId())
+                        .testCaseId(r.getTestCase() != null ? r.getTestCase().getId() : null)
                         .status(r.getStatus())
                         .timeMs(r.getTimeMs())
                         .memoryKb(r.getMemoryKb())
