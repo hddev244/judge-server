@@ -866,7 +866,7 @@ async function loadProblems(page = 0) {
         <td><code>${p.slug}</code></td>
         <td>${escHtml(p.title)}</td>
         <td style="font-size:12px;color:var(--muted)">${p.timeLimitMs}ms / ${p.memoryLimitKb}KB</td>
-        <td>${p.published
+        <td>${p.isPublished
           ? '<span class="badge badge-green">Published</span>'
           : '<span class="badge badge-gray">Draft</span>'}</td>
         <td>${p.checkerType === 'CUSTOM'
@@ -876,7 +876,7 @@ async function loadProblems(page = 0) {
           <button class="btn btn-ghost btn-sm" onclick="openTestCases(${p.id},'${p.title.replace(/'/g,"\\'")}')">🧪</button>
           <button class="btn btn-ghost btn-sm" onclick="openChecker(${p.id},'${p.title.replace(/'/g,"\\'")}','${p.checkerType||'EXACT'}','${p.checkerLanguage||'cpp'}')">⚖️</button>
           <button class="btn btn-ghost btn-sm" onclick="openEdit(${p.id},'${p.slug}','${p.title.replace(/'/g,"\\'")}','${(p.description||'').replace(/'/g,"\\'").replace(/\n/g,'\\n')}',${p.timeLimitMs},${p.memoryLimitKb},'${p.descriptionFormat||'MARKDOWN'}','${p.difficulty||''}',${JSON.stringify(p.tags||[])})">✏️</button>
-          ${!p.published
+          ${!p.isPublished
             ? `<button class="btn btn-success btn-sm" onclick="publishProblem(${p.id})">Publish</button>`
             : `<button class="btn btn-ghost btn-sm" onclick="unpublishProblem(${p.id})" title="Ẩn bài">🙈 Ẩn</button>`}
           <button class="btn btn-danger btn-sm" onclick="deleteProblem(${p.id},'${p.title.replace(/'/g,"\\'")}')">🗑 Xóa</button>

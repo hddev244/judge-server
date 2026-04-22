@@ -20,7 +20,7 @@ public class SubmissionResult {
     private Submission submission;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "test_case_id", nullable = false)
+    @JoinColumn(name = "test_case_id", nullable = true)
     private TestCase testCase;
 
     @Column(nullable = false, length = 20)

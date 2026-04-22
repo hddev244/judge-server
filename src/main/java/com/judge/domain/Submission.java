@@ -21,7 +21,7 @@ public class Submission {
     private String userRef;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "problem_id", nullable = false)
+    @JoinColumn(name = "problem_id", nullable = true)
     private Problem problem;
 
     @Column(nullable = false, length = 10)
