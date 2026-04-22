@@ -233,7 +233,7 @@ code{font-family:var(--mono);font-size:12px;background:var(--surface2);padding:2
     </div>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>#</th><th>Slug</th><th>Title</th><th>Limits</th><th>Status</th><th>Checker</th><th>Actions</th></tr></thead>
+        <thead><tr><th>#</th><th>Slug</th><th>Title</th><th>Limits</th><th>Languages</th><th>Status</th><th>Checker</th><th>Actions</th></tr></thead>
         <tbody id="problems-body"><tr><td colspan="7"><div class="empty"><p>Đang tải...</p></div></td></tr></tbody>
       </table>
     </div>
@@ -343,6 +343,14 @@ code{font-family:var(--mono);font-size:12px;background:var(--surface2);padding:2
       <div class="form-group"><label>Tags <span style="font-size:11px;color:var(--muted)">(phân cách bởi dấu phẩy)</span></label><input id="p-tags" placeholder="dp, greedy, sorting"/></div>
     </div>
     <div class="form-group">
+      <label>Ngôn ngữ được phép <span style="font-size:11px;color:var(--muted)">(không chọn = cho phép tất cả)</span></label>
+      <div style="display:flex;gap:16px;padding:8px 0">
+        <label class="form-check"><input type="checkbox" id="p-lang-cpp" value="cpp" checked/> C++</label>
+        <label class="form-check"><input type="checkbox" id="p-lang-java" value="java" checked/> Java</label>
+        <label class="form-check"><input type="checkbox" id="p-lang-python" value="python" checked/> Python</label>
+      </div>
+    </div>
+    <div class="form-group">
       <label>Topics <span style="font-size:11px;color:var(--muted)">(giữ Ctrl/Cmd để chọn nhiều)</span></label>
       <select id="p-topics" multiple style="height:90px"></select>
     </div>
@@ -382,6 +390,14 @@ code{font-family:var(--mono);font-size:12px;background:var(--surface2);padding:2
         </select>
       </div>
       <div class="form-group"><label>Tags <span style="font-size:11px;color:var(--muted)">(phân cách bởi dấu phẩy)</span></label><input id="ep-tags" placeholder="dp, greedy, sorting"/></div>
+    </div>
+    <div class="form-group">
+      <label>Ngôn ngữ được phép <span style="font-size:11px;color:var(--muted)">(không chọn = cho phép tất cả)</span></label>
+      <div style="display:flex;gap:16px;padding:8px 0">
+        <label class="form-check"><input type="checkbox" id="ep-lang-cpp" value="cpp"/> C++</label>
+        <label class="form-check"><input type="checkbox" id="ep-lang-java" value="java"/> Java</label>
+        <label class="form-check"><input type="checkbox" id="ep-lang-python" value="python"/> Python</label>
+      </div>
     </div>
     <div class="form-group">
       <label>Topics <span style="font-size:11px;color:var(--muted)">(giữ Ctrl/Cmd để chọn nhiều)</span></label>
@@ -866,6 +882,7 @@ async function loadProblems(page = 0) {
         <td><code>${p.slug}</code></td>
         <td>${escHtml(p.title)}</td>
         <td style="font-size:12px;color:var(--muted)">${p.timeLimitMs}ms / ${p.memoryLimitKb}KB</td>
+        <td style="font-size:12px">${langBadges(p.allowedLanguages)}</td>
         <td>${p.isPublished
           ? '<span class="badge badge-green">Published</span>'
           : '<span class="badge badge-gray">Draft</span>'}</td>
@@ -892,6 +909,21 @@ function parseTags(str) {
   return str.split(',').map(s => s.trim()).filter(s => s.length > 0);
 }
 
+function getCheckedLangs(prefix) {
+  const all = ['cpp','java','python'];
+  const checked = all.filter(l => {
+    const el = document.getElementById(prefix + '-' + l);
+    return el && el.checked;
+  });
+  return checked.length === all.length ? null : checked;
+}
+
+function langBadges(langs) {
+  if (!langs || langs.length === 0) return '<span style="color:#6b7280;font-size:11px">All</span>';
+  const colors = {cpp:'#3b82f6',java:'#f59e0b',python:'#10b981'};
+  return langs.map(l => `<span style="background:${colors[l]||'#6b7280'};color:#fff;border-radius:4px;padding:1px 6px;font-size:11px;margin-right:2px">${l}</span>`).join('');
+}
+
 async function createProblem() {
   const btn = document.getElementById('btn-create-problem');
   btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Đang tạo...';
@@ -910,7 +942,8 @@ async function createProblem() {
         difficulty: diff || null,
         tags: parseTags(document.getElementById('p-tags').value),
         topicIds: getSelectedIds('p-topics'),
-        categoryIds: getSelectedIds('p-categories')
+        categoryIds: getSelectedIds('p-categories'),
+        allowedLanguages: getCheckedLangs('p-lang')
       })
     });
     closeModal('modal-problem');
@@ -923,6 +956,7 @@ async function createProblem() {
     document.getElementById('p-difficulty').value = '';
     clearMultiSelect('p-topics');
     clearMultiSelect('p-categories');
+    ['cpp','java','python'].forEach(l => { const el = document.getElementById('p-lang-'+l); if(el) el.checked = true; });
   } catch(e) { toast('Lỗi: ' + e.message, 'error'); }
   finally { btn.disabled = false; btn.textContent = 'Tạo'; }
 }
@@ -948,9 +982,18 @@ async function openEdit(id, slug, title, desc, time, mem, format, difficulty, ta
     const selCatIds = (problem.categories || []).map(c => c.id);
     populateMultiSelect('ep-topics', topics.map(t => ({id: t.id, label: t.name})), selTopicIds);
     populateMultiSelect('ep-categories', categories.map(c => ({id: c.id, label: c.name})), selCatIds);
+    const allowedLangs = problem.allowedLanguages;
+    ['cpp','java','python'].forEach(l => {
+      const el = document.getElementById('ep-lang-' + l);
+      if (el) el.checked = !allowedLangs || allowedLangs.includes(l);
+    });
   } catch(e) {
     populateMultiSelect('ep-topics', [], []);
     populateMultiSelect('ep-categories', [], []);
+    ['cpp','java','python'].forEach(l => {
+      const el = document.getElementById('ep-lang-' + l);
+      if (el) el.checked = true;
+    });
   }
 
   openModal('modal-edit-problem');
@@ -973,7 +1016,8 @@ async function updateProblem() {
         difficulty: diff || null,
         tags: parseTags(document.getElementById('ep-tags').value),
         topicIds: getSelectedIds('ep-topics'),
-        categoryIds: getSelectedIds('ep-categories')
+        categoryIds: getSelectedIds('ep-categories'),
+        allowedLanguages: getCheckedLangs('ep-lang')
       })
     });
     closeModal('modal-edit-problem');

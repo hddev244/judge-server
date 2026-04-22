@@ -64,6 +64,10 @@ public class Problem {
     @Column(name = "checker_bin_path", length = 500)
     private String checkerBinPath;
 
+    /** Comma-separated language keys, e.g. "cpp,java". NULL = all allowed. */
+    @Column(name = "allowed_languages", length = 100)
+    private String allowedLanguages;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

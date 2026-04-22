@@ -15,6 +15,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -37,6 +38,14 @@ public class SubmissionService {
         Problem problem = problemRepository.findById(req.getProblemId())
                 .filter(Problem::isPublished)
                 .orElseThrow(() -> JudgeException.notFound("Problem not found or not published"));
+
+        if (problem.getAllowedLanguages() != null && !problem.getAllowedLanguages().isBlank()) {
+            List<String> allowed = java.util.Arrays.asList(problem.getAllowedLanguages().split(","));
+            if (!allowed.contains(req.getLanguage())) {
+                throw JudgeException.badRequest(
+                        "Language '" + req.getLanguage() + "' is not allowed for this problem. Allowed: " + allowed);
+            }
+        }
 
         Long contestId = null;
         if (req.getContestId() != null) {

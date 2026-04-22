@@ -32,6 +32,7 @@ public class ProblemResponse {
     private String checkerType;
     private String checkerLanguage;
     private boolean hasChecker;
+    private List<String> allowedLanguages;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -92,6 +93,9 @@ public class ProblemResponse {
                 .checkerType(p.getCheckerType())
                 .checkerLanguage(p.getCheckerLanguage())
                 .hasChecker(p.getCheckerBinPath() != null && !p.getCheckerBinPath().isBlank())
+                .allowedLanguages(p.getAllowedLanguages() != null && !p.getAllowedLanguages().isBlank()
+                        ? java.util.Arrays.asList(p.getAllowedLanguages().split(","))
+                        : null)
                 .createdAt(p.getCreatedAt())
                 .updatedAt(p.getUpdatedAt())
                 .build();

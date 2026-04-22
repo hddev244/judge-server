@@ -32,4 +32,7 @@ public class ProblemRequest {
     private List<Long> topicIds;
 
     private List<Long> categoryIds;
+
+    /** null or empty = all languages allowed */
+    private List<String> allowedLanguages;
 }

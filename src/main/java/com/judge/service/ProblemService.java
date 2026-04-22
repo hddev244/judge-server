@@ -61,6 +61,7 @@ public class ProblemService {
                 .timeLimitMs(req.getTimeLimitMs())
                 .memoryLimitKb(req.getMemoryLimitKb())
                 .difficulty(req.getDifficulty())
+                .allowedLanguages(toLanguageString(req.getAllowedLanguages()))
                 .isPublished(false)
                 .build();
         problem = problemRepository.save(problem);
@@ -79,6 +80,7 @@ public class ProblemService {
         problem.setTimeLimitMs(req.getTimeLimitMs());
         problem.setMemoryLimitKb(req.getMemoryLimitKb());
         problem.setDifficulty(req.getDifficulty());
+        problem.setAllowedLanguages(toLanguageString(req.getAllowedLanguages()));
         problem = problemRepository.save(problem);
         problemTagRepository.deleteByProblemId(id);
         List<String> tags = saveTags(problem, req.getTags());
@@ -316,6 +318,14 @@ public class ProblemService {
                     problem.getCategories().add(c);
                     c.getProblems().add(problem);
                 }));
+    }
+
+    private String toLanguageString(List<String> langs) {
+        if (langs == null || langs.isEmpty()) return null;
+        String joined = langs.stream()
+                .map(String::trim).filter(s -> !s.isBlank()).distinct()
+                .reduce((a, b) -> a + "," + b).orElse(null);
+        return (joined == null || joined.isBlank()) ? null : joined;
     }
 
     /** Persists the tag list and returns the normalized tag strings. */
