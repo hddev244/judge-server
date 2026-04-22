@@ -88,7 +88,9 @@ public class ProblemService {
     }
 
     @Transactional(readOnly = true)
-    public ProblemSearchResponse search(String q, List<String> tags, String difficulty, int page, int size) {
+    public ProblemSearchResponse search(String q, List<String> tags, String difficulty,
+                                         String topicSlug, String categorySlug,
+                                         int page, int size) {
         Specification<Problem> spec = ProblemSpecification.isPublished();
         if (q != null && !q.isBlank())
             spec = spec.and(ProblemSpecification.titleContains(q.trim()));
@@ -96,6 +98,10 @@ public class ProblemService {
             spec = spec.and(ProblemSpecification.hasDifficulty(difficulty));
         if (tags != null && !tags.isEmpty())
             spec = spec.and(ProblemSpecification.hasTags(tags));
+        if (topicSlug != null && !topicSlug.isBlank())
+            spec = spec.and(ProblemSpecification.hasTopic(topicSlug.trim()));
+        if (categorySlug != null && !categorySlug.isBlank())
+            spec = spec.and(ProblemSpecification.hasCategory(categorySlug.trim()));
 
         Page<Problem> result = problemRepository.findAll(spec,
                 PageRequest.of(page, size, Sort.by("id").ascending()));

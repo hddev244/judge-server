@@ -24,13 +24,15 @@ public class ProblemController {
             @RequestParam(required = false) String q,
             @RequestParam(required = false) String tags,
             @RequestParam(required = false) String difficulty,
+            @RequestParam(required = false) String topic,
+            @RequestParam(required = false) String category,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         List<String> tagList = (tags != null && !tags.isBlank())
                 ? Arrays.stream(tags.split(",")).map(String::trim).filter(s -> !s.isBlank()).toList()
                 : null;
         size = Math.min(size, 100);
-        return ResponseEntity.ok(problemService.search(q, tagList, difficulty, page, size));
+        return ResponseEntity.ok(problemService.search(q, tagList, difficulty, topic, category, page, size));
     }
 
     @GetMapping("/{slug}")
