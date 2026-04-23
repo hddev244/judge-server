@@ -81,12 +81,14 @@ public class AdminController {
     @GetMapping("/problems")
     public ResponseEntity<Page<ProblemResponse>> listProblems(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String status) {
         requireAdmin();
-        return ResponseEntity.ok(
-                problemRepository.findAll(PageRequest.of(page, size, Sort.by("id").descending()))
-                        .map(ProblemResponse::from)
-        );
+        var pageReq = PageRequest.of(page, size, Sort.by("id").descending());
+        Page<ProblemResponse> result = (status != null && !status.isBlank())
+                ? problemRepository.findByStatus(status.toUpperCase(), pageReq).map(ProblemResponse::from)
+                : problemRepository.findAll(pageReq).map(ProblemResponse::from);
+        return ResponseEntity.ok(result);
     }
 
     // ── Submissions ───────────────────────────────────────────

@@ -226,7 +226,13 @@ code{font-family:var(--mono);font-size:12px;background:var(--surface2);padding:2
   <div class="page" id="page-problems">
     <div class="page-header">
       <div><div class="page-title">Problems</div><div class="page-sub">Quản lý bài toán</div></div>
-      <div style="display:flex;gap:8px">
+      <div style="display:flex;gap:8px;align-items:center">
+        <select id="filter-problem-status" onchange="loadProblems(0)" style="height:34px;padding:0 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:13px">
+          <option value="">Tất cả</option>
+          <option value="PRIVATE">Draft</option>
+          <option value="PUBLIC">Public</option>
+          <option value="CONTEST">Contest</option>
+        </select>
         <button class="btn btn-ghost" onclick="openModal('modal-import')">📦 Import ZIP</button>
         <button class="btn btn-primary" onclick="openCreateProblemModal()">+ Tạo problem</button>
       </div>
@@ -874,7 +880,9 @@ async function loadProblems(page = 0) {
   problemsPage = page;
   if (!apiKey) return;
   try {
-    const data = await api(`/api/v1/admin/problems?page=${page}&size=20`);
+    const statusFilter = document.getElementById('filter-problem-status')?.value || '';
+    const statusParam = statusFilter ? `&status=${statusFilter}` : '';
+    const data = await api(`/api/v1/admin/problems?page=${page}&size=20${statusParam}`);
     const list = data.content || [];
     const rows = list.length ? list.map(p => `
       <tr>

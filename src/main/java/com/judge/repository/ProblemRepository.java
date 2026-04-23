@@ -1,6 +1,8 @@
 package com.judge.repository;
 
 import com.judge.domain.Problem;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import java.util.List;
@@ -13,5 +15,6 @@ public interface ProblemRepository extends JpaRepository<Problem, Long>,
     Optional<Problem> findBySlug(String slug);
     List<Problem> findByIsPublishedTrueOrderByIdAsc();
     List<Problem> findByStatusOrderByIdAsc(String status);
+    Page<Problem> findByStatus(String status, Pageable pageable);
     List<Problem> findAllByOrderByIdAsc();
 }
