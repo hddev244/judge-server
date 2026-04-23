@@ -36,8 +36,15 @@ public class SubmissionService {
     @Transactional
     public SubmissionResponse create(SubmitRequest req) {
         Problem problem = problemRepository.findById(req.getProblemId())
-                .filter(Problem::isPublished)
-                .orElseThrow(() -> JudgeException.notFound("Problem not found or not published"));
+                .orElseThrow(() -> JudgeException.notFound("Problem not found"));
+
+        String problemStatus = problem.getStatus() != null ? problem.getStatus() : "PRIVATE";
+        if ("PRIVATE".equals(problemStatus)) {
+            throw JudgeException.notFound("Problem not found or not available");
+        }
+        if ("CONTEST".equals(problemStatus) && req.getContestId() == null) {
+            throw JudgeException.badRequest("This problem is only available within a contest");
+        }
 
         if (problem.getAllowedLanguages() != null && !problem.getAllowedLanguages().isBlank()) {
             List<String> allowed = java.util.Arrays.asList(problem.getAllowedLanguages().split(","));

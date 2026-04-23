@@ -37,6 +37,11 @@ public class Problem {
     @Column(name = "is_published", nullable = false)
     private boolean isPublished;
 
+    /** PRIVATE (default) | PUBLIC | CONTEST */
+    @Column(name = "status", length = 10, nullable = false)
+    @Builder.Default
+    private String status = "PRIVATE";
+
     @Column(name = "difficulty", length = 10)
     private String difficulty;
 
@@ -93,8 +98,14 @@ public class Problem {
     private List<TestCase> testCases;
 
     @PrePersist
-    void prePersist() { createdAt = updatedAt = LocalDateTime.now(); }
+    void prePersist() {
+        createdAt = updatedAt = LocalDateTime.now();
+        isPublished = "PUBLIC".equals(status);
+    }
 
     @PreUpdate
-    void preUpdate() { updatedAt = LocalDateTime.now(); }
+    void preUpdate() {
+        updatedAt = LocalDateTime.now();
+        isPublished = "PUBLIC".equals(status);
+    }
 }

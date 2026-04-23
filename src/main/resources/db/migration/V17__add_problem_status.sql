@@ -1,0 +1,2 @@
+ALTER TABLE problems ADD COLUMN status VARCHAR(10) NOT NULL DEFAULT 'PRIVATE';
+UPDATE problems SET status = CASE WHEN is_published = true THEN 'PUBLIC' ELSE 'PRIVATE' END;

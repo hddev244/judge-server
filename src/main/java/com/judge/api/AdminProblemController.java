@@ -60,6 +60,12 @@ public class AdminProblemController {
         return ResponseEntity.ok(problemService.unpublish(id));
     }
 
+    @PostMapping("/{id}/contest")
+    public ResponseEntity<ProblemResponse> setContest(@PathVariable Long id) {
+        requireAdmin();
+        return ResponseEntity.ok(problemService.setContest(id));
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         requireAdmin();

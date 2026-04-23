@@ -11,7 +11,7 @@ import java.util.List;
 public class ProblemSpecification {
 
     public static Specification<Problem> isPublished() {
-        return (root, query, cb) -> cb.isTrue(root.get("isPublished"));
+        return (root, query, cb) -> cb.equal(root.get("status"), "PUBLIC");
     }
 
     public static Specification<Problem> hasDifficulty(String difficulty) {

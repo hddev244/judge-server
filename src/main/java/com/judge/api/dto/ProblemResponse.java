@@ -23,6 +23,7 @@ public class ProblemResponse {
     private int memoryLimitKb;
     @JsonProperty("isPublished")
     private boolean isPublished;
+    private String status;
     private String difficulty;
     private List<String> tags;
     private List<TopicInfo> topics;
@@ -84,6 +85,7 @@ public class ProblemResponse {
                 .timeLimitMs(p.getTimeLimitMs())
                 .memoryLimitKb(p.getMemoryLimitKb())
                 .isPublished(p.isPublished())
+                .status(p.getStatus() != null ? p.getStatus() : (p.isPublished() ? "PUBLIC" : "PRIVATE"))
                 .difficulty(p.getDifficulty())
                 .tags(tags)
                 .topics(topics)

@@ -883,9 +883,11 @@ async function loadProblems(page = 0) {
         <td>${escHtml(p.title)}</td>
         <td style="font-size:12px;color:var(--muted)">${p.timeLimitMs}ms / ${p.memoryLimitKb}KB</td>
         <td style="font-size:12px">${langBadges(p.allowedLanguages)}</td>
-        <td>${p.isPublished
-          ? '<span class="badge badge-green">Published</span>'
-          : '<span class="badge badge-gray">Draft</span>'}</td>
+        <td>${p.status === 'PUBLIC'
+          ? '<span class="badge badge-green">Public</span>'
+          : p.status === 'CONTEST'
+            ? '<span class="badge badge-blue">Contest</span>'
+            : '<span class="badge badge-gray">Draft</span>'}</td>
         <td>${p.checkerType === 'CUSTOM'
           ? `<span class="badge badge-purple">Custom (${p.checkerLanguage||'?'})</span>`
           : '<span class="badge badge-gray">Exact</span>'}</td>
@@ -893,9 +895,9 @@ async function loadProblems(page = 0) {
           <button class="btn btn-ghost btn-sm" onclick="openTestCases(${p.id},'${p.title.replace(/'/g,"\\'")}')">🧪</button>
           <button class="btn btn-ghost btn-sm" onclick="openChecker(${p.id},'${p.title.replace(/'/g,"\\'")}','${p.checkerType||'EXACT'}','${p.checkerLanguage||'cpp'}')">⚖️</button>
           <button class="btn btn-ghost btn-sm" onclick="openEdit(${p.id},'${p.slug}','${p.title.replace(/'/g,"\\'")}','${(p.description||'').replace(/'/g,"\\'").replace(/\n/g,'\\n')}',${p.timeLimitMs},${p.memoryLimitKb},'${p.descriptionFormat||'MARKDOWN'}','${p.difficulty||''}',${JSON.stringify(p.tags||[])})">✏️</button>
-          ${!p.isPublished
-            ? `<button class="btn btn-success btn-sm" onclick="publishProblem(${p.id})">Publish</button>`
-            : `<button class="btn btn-ghost btn-sm" onclick="unpublishProblem(${p.id})" title="Ẩn bài">🙈 Ẩn</button>`}
+          ${p.status !== 'PUBLIC' ? `<button class="btn btn-success btn-sm" onclick="setProblemStatus(${p.id},'publish')" title="Chuyển sang Public">▶ Public</button>` : ''}
+          ${p.status !== 'CONTEST' ? `<button class="btn btn-primary btn-sm" onclick="setProblemStatus(${p.id},'contest')" title="Chỉ dùng trong contest">🏆 Contest</button>` : ''}
+          ${p.status !== 'PRIVATE' ? `<button class="btn btn-ghost btn-sm" onclick="setProblemStatus(${p.id},'unpublish')" title="Chuyển về Draft">🙈 Draft</button>` : ''}
           <button class="btn btn-danger btn-sm" onclick="deleteProblem(${p.id},'${p.title.replace(/'/g,"\\'")}')">🗑 Xóa</button>
         </td>
       </tr>`).join('')
@@ -1026,20 +1028,18 @@ async function updateProblem() {
   } catch(e) { toast('Lỗi: ' + e.message, 'error'); }
 }
 
-async function publishProblem(id) {
-  if (!confirm('Publish problem này? Sau khi publish, người dùng có thể submit.')) return;
-  try {
-    await api(`/api/v1/admin/problems/${id}/publish`, { method: 'POST' });
-    toast('Published!', 'success');
-    loadProblems(problemsPage);
-  } catch(e) { toast('Lỗi: ' + e.message, 'error'); }
-}
+const STATUS_ACTIONS = {
+  publish:   { endpoint: 'publish',   confirm: 'Chuyển bài sang Public? Người dùng sẽ thấy và submit được.', ok: 'Đã chuyển sang Public.' },
+  contest:   { endpoint: 'contest',   confirm: 'Chuyển bài sang Contest? Chỉ submit được khi trong contest.', ok: 'Đã chuyển sang Contest.' },
+  unpublish: { endpoint: 'unpublish', confirm: 'Chuyển bài về Draft? Người dùng sẽ không thấy bài này nữa.', ok: 'Đã chuyển về Draft.' },
+};
 
-async function unpublishProblem(id) {
-  if (!confirm('Ẩn problem này? Người dùng sẽ không thể xem hoặc submit bài này cho đến khi publish lại.')) return;
+async function setProblemStatus(id, action) {
+  const cfg = STATUS_ACTIONS[action];
+  if (!confirm(cfg.confirm)) return;
   try {
-    await api(`/api/v1/admin/problems/${id}/unpublish`, { method: 'POST' });
-    toast('Đã ẩn problem.', 'success');
+    await api(`/api/v1/admin/problems/${id}/${cfg.endpoint}`, { method: 'POST' });
+    toast(cfg.ok, 'success');
     loadProblems(problemsPage);
   } catch(e) { toast('Lỗi: ' + e.message, 'error'); }
 }

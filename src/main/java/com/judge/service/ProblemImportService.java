@@ -92,7 +92,7 @@ public class ProblemImportService {
                 .timeLimitMs(getInt(meta, "timeLimitMs", 2000))
                 .memoryLimitKb(getInt(meta, "memoryLimitKb", 262144))
                 .difficulty(difficulty)
-                .isPublished(false)
+                .status("PRIVATE")
                 .build();
         problem = problemRepository.save(problem);
 

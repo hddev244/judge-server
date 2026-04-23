@@ -9,7 +9,9 @@ import java.util.Optional;
 public interface ProblemRepository extends JpaRepository<Problem, Long>,
         JpaSpecificationExecutor<Problem> {
     Optional<Problem> findBySlugAndIsPublishedTrue(String slug);
+    Optional<Problem> findBySlugAndStatus(String slug, String status);
     Optional<Problem> findBySlug(String slug);
     List<Problem> findByIsPublishedTrueOrderByIdAsc();
+    List<Problem> findByStatusOrderByIdAsc(String status);
     List<Problem> findAllByOrderByIdAsc();
 }

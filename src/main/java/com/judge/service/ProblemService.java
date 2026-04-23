@@ -62,7 +62,7 @@ public class ProblemService {
                 .memoryLimitKb(req.getMemoryLimitKb())
                 .difficulty(req.getDifficulty())
                 .allowedLanguages(toLanguageString(req.getAllowedLanguages()))
-                .isPublished(false)
+                .status("PRIVATE")
                 .build();
         problem = problemRepository.save(problem);
         List<String> tags = saveTags(problem, req.getTags());
@@ -122,8 +122,15 @@ public class ProblemService {
 
     @Transactional(readOnly = true)
     public List<ProblemResponse> listPublished() {
-        return problemRepository.findByIsPublishedTrueOrderByIdAsc()
+        return problemRepository.findByStatusOrderByIdAsc("PUBLIC")
                 .stream().map(ProblemResponse::from).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public Page<ProblemResponse> listAll(int page, int size) {
+        return problemRepository.findAll(
+                PageRequest.of(page, Math.min(size, 200), Sort.by("id").ascending())
+        ).map(ProblemResponse::from);
     }
 
     @Transactional(readOnly = true)
@@ -133,7 +140,7 @@ public class ProblemService {
 
     @Transactional(readOnly = true)
     public ProblemResponse getBySlug(String slug) {
-        return problemRepository.findBySlugAndIsPublishedTrue(slug)
+        return problemRepository.findBySlugAndStatus(slug, "PUBLIC")
                 .map(ProblemResponse::from)
                 .orElseThrow(() -> JudgeException.notFound("Problem not found: " + slug));
     }
@@ -145,14 +152,25 @@ public class ProblemService {
         if (testCaseCount == 0) {
             throw JudgeException.badRequest("Cannot publish problem with no test cases");
         }
-        problem.setPublished(true);
+        problem.setStatus("PUBLIC");
         return ProblemResponse.from(problemRepository.save(problem));
     }
 
     @Transactional
     public ProblemResponse unpublish(Long id) {
         Problem problem = getOrThrow(id);
-        problem.setPublished(false);
+        problem.setStatus("PRIVATE");
+        return ProblemResponse.from(problemRepository.save(problem));
+    }
+
+    @Transactional
+    public ProblemResponse setContest(Long id) {
+        Problem problem = getOrThrow(id);
+        long testCaseCount = testCaseRepository.findByProblemIdOrderByOrderIndexAsc(id).size();
+        if (testCaseCount == 0) {
+            throw JudgeException.badRequest("Cannot set contest status on problem with no test cases");
+        }
+        problem.setStatus("CONTEST");
         return ProblemResponse.from(problemRepository.save(problem));
     }
 
