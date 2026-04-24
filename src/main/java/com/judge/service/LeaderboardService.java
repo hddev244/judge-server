@@ -72,7 +72,7 @@ public class LeaderboardService {
                 .stream()
                 .map(s -> UserStatsResponse.RecentSubmission.builder()
                         .id(s.getId())
-                        .problemSlug(s.getProblem().getSlug())
+                        .problemSlug(s.getProblem() != null ? s.getProblem().getSlug() : null)
                         .language(s.getLanguage())
                         .status(s.getStatus())
                         .score(s.getScore())

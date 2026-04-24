@@ -152,6 +152,7 @@
     <a href="#websocket"><span class="dot" style="background:#6c63ff"></span>WebSocket Realtime</a>
     <a href="#testrun"><span class="dot" style="background:#00d4aa"></span>Test Run</a>
     <a href="#problems"><span class="dot" style="background:#3b82f6"></span>Problems &amp; Search</a>
+    <a href="#topics"><span class="dot" style="background:#3b82f6"></span>Topics &amp; Categories</a>
     <a href="#leaderboard"><span class="dot" style="background:#00d4aa"></span>Leaderboard</a>
     <a href="#contests"><span class="dot" style="background:#f59e0b"></span>Contests (Public)</a>
     <a href="#admin"><span class="dot" style="background:#a855f7"></span>Admin — Problems</a>
@@ -159,6 +160,7 @@
     <a href="#checker"><span class="dot" style="background:#a855f7"></span>Admin — Checker</a>
     <a href="#import"><span class="dot" style="background:#a855f7"></span>Admin — Import ZIP</a>
     <a href="#admin-contests"><span class="dot" style="background:#a855f7"></span>Admin — Contests</a>
+    <a href="#admin-topics"><span class="dot" style="background:#a855f7"></span>Admin — Topics/Categories</a>
     <a href="#webhook"><span class="dot" style="background:#f59e0b"></span>Webhook</a>
   </div>
 
@@ -332,11 +334,11 @@ HEADERS    = {<span class="s">"X-API-Key"</span>: <span class="s">"your_api_key"
         <p style="color:var(--muted);font-size:13.5px;margin:12px 0 8px">Request body (JSON):</p>
         <table>
           <tr><th>Field</th><th>Type</th><th>Bắt buộc</th><th>Mô tả</th></tr>
-          <tr><td><code>problemId</code></td><td><code>number</code></td><td>✅</td><td>ID bài toán (phải đã published)</td></tr>
-          <tr><td><code>language</code></td><td><code>string</code></td><td>✅</td><td><code>cpp</code> · <code>java</code> · <code>python</code></td></tr>
+          <tr><td><code>problemId</code></td><td><code>number</code></td><td>✅</td><td>ID bài toán (status phải là <code>PUBLIC</code> hoặc <code>CONTEST</code>)</td></tr>
+          <tr><td><code>language</code></td><td><code>string</code></td><td>✅</td><td><code>cpp</code> · <code>java</code> · <code>python</code> (hoặc theo <code>allowedLanguages</code> của bài)</td></tr>
           <tr><td><code>sourceCode</code></td><td><code>string</code></td><td>✅</td><td>Mã nguồn đầy đủ</td></tr>
           <tr><td><code>userRef</code></td><td><code>string</code></td><td>—</td><td>ID user trong hệ thống của bạn</td></tr>
-          <tr><td><code>contestId</code></td><td><code>number</code></td><td>—</td><td>ID contest nếu nộp trong contest</td></tr>
+          <tr><td><code>contestId</code></td><td><code>number</code></td><td>—</td><td>ID contest nếu muốn gắn submission vào contest nội bộ</td></tr>
           <tr><td><code>callbackUrl</code></td><td><code>string</code></td><td>—</td><td>URL nhận webhook khi chấm xong</td></tr>
         </table>
         <div class="code-block">
@@ -368,6 +370,7 @@ HEADERS    = {<span class="s">"X-API-Key"</span>: <span class="s">"your_api_key"
           <div class="code-header"><span>Response — 200 OK (đã chấm xong)</span></div>
           <pre>{
   <span class="p">"submissionId"</span>: <span class="s">"sub_39a8bdc114"</span>,
+  <span class="p">"problemSlug"</span>:  <span class="s">"a-plus-b"</span>,
   <span class="p">"status"</span>:       <span class="s">"AC"</span>,
   <span class="p">"score"</span>:        <span class="n">100</span>,
   <span class="p">"timeMs"</span>:       <span class="n">260</span>,
@@ -502,7 +505,7 @@ stompClient.activate();</pre>
         <span class="method GET">GET</span>
         <span class="endpoint-path">/api/v1/problems</span>
         <span class="badge auth">Auth</span>
-        <span class="endpoint-desc">Tìm kiếm bài đã published (có phân trang)</span>
+        <span class="endpoint-desc">Tìm kiếm bài PUBLIC (có phân trang)</span>
       </div>
       <div class="endpoint-body">
         <p style="color:var(--muted);font-size:13.5px;margin:12px 0 8px">Query params:</p>
@@ -511,6 +514,8 @@ stompClient.activate();</pre>
           <tr><td><code>q</code></td><td>Tìm theo title (LIKE)</td><td><code>?q=sort</code></td></tr>
           <tr><td><code>tags</code></td><td>Lọc theo tag (AND — bài phải có đủ tất cả)</td><td><code>?tags=dp,greedy</code></td></tr>
           <tr><td><code>difficulty</code></td><td><code>easy</code> · <code>medium</code> · <code>hard</code></td><td><code>?difficulty=medium</code></td></tr>
+          <tr><td><code>topicSlug</code></td><td>Lọc theo topic slug</td><td><code>?topicSlug=dp</code></td></tr>
+          <tr><td><code>categorySlug</code></td><td>Lọc theo category slug</td><td><code>?categorySlug=graph-theory</code></td></tr>
           <tr><td><code>page</code></td><td>Trang (bắt đầu từ 0)</td><td><code>?page=0</code></td></tr>
           <tr><td><code>size</code></td><td>Số bài mỗi trang (tối đa 100)</td><td><code>?size=20</code></td></tr>
         </table>
@@ -522,13 +527,16 @@ stompClient.activate();</pre>
       <span class="p">"id"</span>: <span class="n">1</span>,
       <span class="p">"slug"</span>: <span class="s">"a-plus-b"</span>,
       <span class="p">"title"</span>: <span class="s">"A + B"</span>,
+      <span class="p">"status"</span>: <span class="s">"PUBLIC"</span>,           <span class="c">// "PRIVATE" | "PUBLIC" | "CONTEST"</span>
       <span class="p">"difficulty"</span>: <span class="s">"easy"</span>,
-      <span class="p">"tags"</span>: [<span class="s">"math"</span>, <span class="s">"implementation"</span>],
+      <span class="p">"tags"</span>: [<span class="s">"math"</span>],
+      <span class="p">"topics"</span>: [{ <span class="p">"id"</span>: <span class="n">1</span>, <span class="p">"name"</span>: <span class="s">"DP"</span>, <span class="p">"slug"</span>: <span class="s">"dp"</span> }],
+      <span class="p">"categories"</span>: [{ <span class="p">"id"</span>: <span class="n">2</span>, <span class="p">"name"</span>: <span class="s">"Graph"</span>, <span class="p">"slug"</span>: <span class="s">"graph"</span> }],
+      <span class="p">"allowedLanguages"</span>: [<span class="s">"cpp"</span>, <span class="s">"java"</span>],   <span class="c">// null = tất cả ngôn ngữ</span>
       <span class="p">"solvedCount"</span>: <span class="n">42</span>,
       <span class="p">"acceptanceRate"</span>: <span class="n">73.5</span>,
       <span class="p">"timeLimitMs"</span>: <span class="n">1000</span>,
-      <span class="p">"memoryLimitKb"</span>: <span class="n">262144</span>,
-      <span class="p">"isPublished"</span>: <span class="k">true</span>
+      <span class="p">"memoryLimitKb"</span>: <span class="n">262144</span>
     }
   ],
   <span class="p">"totalElements"</span>: <span class="n">42</span>,
@@ -538,9 +546,9 @@ stompClient.activate();</pre>
         </div>
         <div class="code-block">
           <div class="code-header"><span>bash — ví dụ filter</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-          <pre><span class="c"># Tìm bài medium có tag dp AND greedy, từ khoá "sort"</span>
+          <pre><span class="c"># Bài medium, topic DP, category graph-theory</span>
 curl -H <span class="s">"X-API-Key: YOUR_KEY"</span> \
-  <span class="s">"http://&lt;server-ip&gt;:8080/api/v1/problems?q=sort&amp;tags=dp,greedy&amp;difficulty=medium&amp;page=0&amp;size=20"</span></pre>
+  <span class="s">"http://&lt;server-ip&gt;:8080/api/v1/problems?difficulty=medium&amp;topicSlug=dp&amp;categorySlug=graph-theory"</span></pre>
         </div>
       </div>
     </div>
@@ -550,7 +558,7 @@ curl -H <span class="s">"X-API-Key: YOUR_KEY"</span> \
         <span class="method GET">GET</span>
         <span class="endpoint-path">/api/v1/problems/{slug}</span>
         <span class="badge auth">Auth</span>
-        <span class="endpoint-desc">Chi tiết bài theo slug</span>
+        <span class="endpoint-desc">Chi tiết bài PUBLIC theo slug</span>
       </div>
       <div class="endpoint-body">
         <div class="code-block">
@@ -561,20 +569,46 @@ curl -H <span class="s">"X-API-Key: YOUR_KEY"</span> \
   <span class="p">"title"</span>:             <span class="s">"A + B"</span>,
   <span class="p">"description"</span>:      <span class="s">"## Đề bài\nNhập hai số nguyên a, b. In ra **a+b**."</span>,
   <span class="p">"descriptionFormat"</span>: <span class="s">"MARKDOWN"</span>,  <span class="c">// "MARKDOWN" | "HTML"</span>
+  <span class="p">"status"</span>:            <span class="s">"PUBLIC"</span>,
   <span class="p">"difficulty"</span>:        <span class="s">"easy"</span>,
   <span class="p">"tags"</span>:              [<span class="s">"math"</span>],
+  <span class="p">"topics"</span>:            [{ <span class="p">"id"</span>: <span class="n">1</span>, <span class="p">"name"</span>: <span class="s">"DP"</span>, <span class="p">"slug"</span>: <span class="s">"dp"</span> }],
+  <span class="p">"categories"</span>:        [{ <span class="p">"id"</span>: <span class="n">2</span>, <span class="p">"name"</span>: <span class="s">"Graph"</span>, <span class="p">"slug"</span>: <span class="s">"graph"</span> }],
+  <span class="p">"allowedLanguages"</span>:  [<span class="s">"cpp"</span>, <span class="s">"java"</span>],  <span class="c">// null = tất cả ngôn ngữ</span>
   <span class="p">"solvedCount"</span>:       <span class="n">42</span>,
   <span class="p">"acceptanceRate"</span>:    <span class="n">73.5</span>,
   <span class="p">"timeLimitMs"</span>:       <span class="n">1000</span>,
   <span class="p">"memoryLimitKb"</span>:     <span class="n">262144</span>,
-  <span class="p">"isPublished"</span>:       <span class="k">true</span>,
   <span class="p">"checkerType"</span>:       <span class="s">"EXACT"</span>,
   <span class="p">"createdAt"</span>:         <span class="s">"2026-04-17T08:00:00"</span>
 }</pre>
         </div>
-        <p style="color:var(--muted);font-size:13.5px"><code>descriptionFormat</code> cho biết cách render: <code>MARKDOWN</code> → dùng marked.js; <code>HTML</code> → dùng DOMPurify.sanitize rồi innerHTML.</p>
+        <p style="color:var(--muted);font-size:13.5px"><code>descriptionFormat</code>: <code>MARKDOWN</code> → dùng marked.js; <code>HTML</code> → DOMPurify.sanitize + innerHTML. Chỉ trả bài có status <code>PUBLIC</code>; bài <code>CONTEST</code> không trả qua endpoint này.</p>
       </div>
     </div>
+  </div>
+
+  <!-- Topics & Categories -->
+  <div class="section" id="topics">
+    <div class="section-title"><span>🏷️</span>Topics &amp; Categories</div>
+    <div class="alert info">ℹ️ Hai endpoint này <strong>không cần API key</strong>. Dùng để build bộ lọc trên UI.</div>
+
+    <table style="margin-bottom:20px">
+      <tr><th>Method</th><th>Endpoint</th><th>Mô tả</th></tr>
+      <tr><td><span class="method GET" style="display:inline-block">GET</span></td><td><code>/api/v1/topics</code></td><td>Danh sách tất cả topics</td></tr>
+      <tr><td><span class="method GET" style="display:inline-block">GET</span></td><td><code>/api/v1/topics/{slug}</code></td><td>Chi tiết topic theo slug</td></tr>
+      <tr><td><span class="method GET" style="display:inline-block">GET</span></td><td><code>/api/v1/categories</code></td><td>Danh sách tất cả categories</td></tr>
+      <tr><td><span class="method GET" style="display:inline-block">GET</span></td><td><code>/api/v1/categories/{slug}</code></td><td>Chi tiết category theo slug</td></tr>
+    </table>
+
+    <div class="code-block">
+      <div class="code-header"><span>Response — GET /api/v1/topics</span></div>
+      <pre>[
+  { <span class="p">"id"</span>: <span class="n">1</span>, <span class="p">"name"</span>: <span class="s">"Dynamic Programming"</span>, <span class="p">"slug"</span>: <span class="s">"dp"</span>, <span class="p">"description"</span>: <span class="s">"..."</span> },
+  { <span class="p">"id"</span>: <span class="n">2</span>, <span class="p">"name"</span>: <span class="s">"Graph Theory"</span>,          <span class="p">"slug"</span>: <span class="s">"graph"</span>, <span class="p">"description"</span>: <span class="k">null</span> }
+]</pre>
+    </div>
+    <p style="color:var(--muted);font-size:13.5px;margin-top:8px">Kết hợp với <code>?topicSlug=dp</code> trong <code>GET /api/v1/problems</code> để lọc bài theo topic. Tương tự cho <code>categorySlug</code>.</p>
   </div>
 
   <!-- Leaderboard -->
@@ -805,11 +839,25 @@ curl -H <span class="s">"X-API-Key: YOUR_KEY"</span> \
     <p class="sub-label">QUẢN LÝ PROBLEMS</p>
     <table style="margin-bottom:20px">
       <tr><th>Method</th><th>Endpoint</th><th>Mô tả</th></tr>
-      <tr><td><span class="method GET" style="display:inline-block">GET</span></td><td><code>/api/v1/admin/problems?page=0&size=20</code></td><td>Danh sách (phân trang, cả draft)</td></tr>
-      <tr><td><span class="method POST" style="display:inline-block">POST</span></td><td><code>/api/v1/admin/problems</code></td><td>Tạo problem mới</td></tr>
+      <tr><td><span class="method GET" style="display:inline-block">GET</span></td><td><code>/api/v1/admin/problems?page=0&size=20&status=</code></td><td>Danh sách (phân trang). <code>status</code> = <code>PRIVATE</code>·<code>PUBLIC</code>·<code>CONTEST</code> hoặc bỏ trống để lấy tất cả</td></tr>
+      <tr><td><span class="method GET" style="display:inline-block">GET</span></td><td><code>/api/v1/admin/problems/{id}</code></td><td>Chi tiết problem (kể cả PRIVATE/CONTEST)</td></tr>
+      <tr><td><span class="method POST" style="display:inline-block">POST</span></td><td><code>/api/v1/admin/problems</code></td><td>Tạo problem mới (status mặc định: <code>PRIVATE</code>)</td></tr>
       <tr><td><span class="method PUT" style="display:inline-block">PUT</span></td><td><code>/api/v1/admin/problems/{id}</code></td><td>Cập nhật problem</td></tr>
-      <tr><td><span class="method POST" style="display:inline-block">POST</span></td><td><code>/api/v1/admin/problems/{id}/publish</code></td><td>Publish (cần có ≥1 test case)</td></tr>
+      <tr><td><span class="method POST" style="display:inline-block">POST</span></td><td><code>/api/v1/admin/problems/{id}/publish</code></td><td>→ status <code>PUBLIC</code> (cần ≥1 test case)</td></tr>
+      <tr><td><span class="method POST" style="display:inline-block">POST</span></td><td><code>/api/v1/admin/problems/{id}/contest</code></td><td>→ status <code>CONTEST</code> (cần ≥1 test case)</td></tr>
+      <tr><td><span class="method POST" style="display:inline-block">POST</span></td><td><code>/api/v1/admin/problems/{id}/unpublish</code></td><td>→ status <code>PRIVATE</code> (ẩn bài)</td></tr>
+      <tr><td><span class="method DELETE" style="display:inline-block">DELETE</span></td><td><code>/api/v1/admin/problems/{id}</code></td><td>Xóa vĩnh viễn (xóa cả file test cases)</td></tr>
     </table>
+
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-title">Problem status — 3 trạng thái</div>
+      <table style="margin-top:12px">
+        <tr><th>Status</th><th>Người dùng thấy</th><th>Submit / Test Run</th></tr>
+        <tr><td><code>PRIVATE</code></td><td>Không (chỉ admin)</td><td>❌ Bị chặn 404</td></tr>
+        <tr><td><code>PUBLIC</code></td><td>Có — xuất hiện trong search</td><td>✅ Tự do</td></tr>
+        <tr><td><code>CONTEST</code></td><td>Không qua public search (chỉ qua contest API)</td><td>✅ Tự do (không cần contestId)</td></tr>
+      </table>
+    </div>
 
     <p style="font-size:13px;font-weight:700;margin:0 0 8px">Request body (POST / PUT)</p>
     <table style="margin-bottom:20px">
@@ -820,6 +868,9 @@ curl -H <span class="s">"X-API-Key: YOUR_KEY"</span> \
       <tr><td><code>descriptionFormat</code></td><td><code>"MARKDOWN"&nbsp;|&nbsp;"HTML"</code></td><td>Format render description (mặc định <code>MARKDOWN</code>)</td></tr>
       <tr><td><code>difficulty</code></td><td><code>"easy"&nbsp;|&nbsp;"medium"&nbsp;|&nbsp;"hard"</code></td><td>Độ khó (tùy chọn)</td></tr>
       <tr><td><code>tags</code></td><td><code>string[]</code></td><td>Danh sách tags, e.g. <code>["dp","greedy"]</code></td></tr>
+      <tr><td><code>topicIds</code></td><td><code>number[]</code></td><td>ID các topics gắn với bài</td></tr>
+      <tr><td><code>categoryIds</code></td><td><code>number[]</code></td><td>ID các categories gắn với bài</td></tr>
+      <tr><td><code>allowedLanguages</code></td><td><code>string[]</code></td><td>Ngôn ngữ cho phép, e.g. <code>["cpp","java"]</code>. <code>null</code>/bỏ trống = tất cả</td></tr>
       <tr><td><code>timeLimitMs</code></td><td><code>number</code></td><td>Giới hạn thời gian (100–10000 ms)</td></tr>
       <tr><td><code>memoryLimitKb</code></td><td><code>number</code></td><td>Giới hạn bộ nhớ (16384–1048576 KB)</td></tr>
     </table>
@@ -1080,6 +1131,50 @@ curl -X POST <span class="s">"http://&lt;server-ip&gt;:8080/api/v1/contests/roun
         </div>
       </div>
     </div>
+  </div>
+
+  <!-- Admin Topics & Categories -->
+  <div class="section" id="admin-topics">
+    <div class="section-title"><span>🏷️</span>Admin — Topics &amp; Categories</div>
+    <div class="alert warn">⚠️ Tất cả endpoints dưới đây yêu cầu admin key.</div>
+
+    <p class="sub-label">TOPICS</p>
+    <table style="margin-bottom:20px">
+      <tr><th>Method</th><th>Endpoint</th><th>Mô tả</th></tr>
+      <tr><td><span class="method GET" style="display:inline-block">GET</span></td><td><code>/api/v1/admin/topics</code></td><td>Danh sách tất cả topics</td></tr>
+      <tr><td><span class="method GET" style="display:inline-block">GET</span></td><td><code>/api/v1/admin/topics/{id}</code></td><td>Chi tiết topic</td></tr>
+      <tr><td><span class="method POST" style="display:inline-block">POST</span></td><td><code>/api/v1/admin/topics</code></td><td>Tạo topic mới</td></tr>
+      <tr><td><span class="method PUT" style="display:inline-block">PUT</span></td><td><code>/api/v1/admin/topics/{id}</code></td><td>Cập nhật topic</td></tr>
+      <tr><td><span class="method DELETE" style="display:inline-block">DELETE</span></td><td><code>/api/v1/admin/topics/{id}</code></td><td>Xóa topic</td></tr>
+      <tr><td><span class="method POST" style="display:inline-block">POST</span></td><td><code>/api/v1/admin/topics/{id}/problems</code></td><td>Gắn problems vào topic</td></tr>
+      <tr><td><span class="method DELETE" style="display:inline-block">DELETE</span></td><td><code>/api/v1/admin/topics/{id}/problems/{problemId}</code></td><td>Gỡ problem khỏi topic</td></tr>
+    </table>
+
+    <div class="code-block">
+      <div class="code-header"><span>bash — Tạo topic + gắn bài</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+      <pre><span class="c"># Tạo topic</span>
+curl -X POST http://&lt;server-ip&gt;:8080/api/v1/admin/topics \
+  -H <span class="s">"X-API-Key: ADMIN_KEY"</span> -H <span class="s">"Content-Type: application/json"</span> \
+  -d <span class="s">'{"name":"Dynamic Programming","slug":"dp","description":"..."}'</span>
+<span class="c"># → {"id":1,"name":"Dynamic Programming","slug":"dp",...}</span>
+
+<span class="c"># Gắn bài vào topic (có thể gắn nhiều cùng lúc)</span>
+curl -X POST http://&lt;server-ip&gt;:8080/api/v1/admin/topics/<span class="n">1</span>/problems \
+  -H <span class="s">"X-API-Key: ADMIN_KEY"</span> -H <span class="s">"Content-Type: application/json"</span> \
+  -d <span class="s">'{"problemIds":[1,2,3]}'</span></pre>
+    </div>
+
+    <p class="sub-label">CATEGORIES</p>
+    <table style="margin-bottom:16px">
+      <tr><th>Method</th><th>Endpoint</th><th>Mô tả</th></tr>
+      <tr><td><span class="method GET" style="display:inline-block">GET</span></td><td><code>/api/v1/admin/categories</code></td><td>Danh sách tất cả categories</td></tr>
+      <tr><td><span class="method POST" style="display:inline-block">POST</span></td><td><code>/api/v1/admin/categories</code></td><td>Tạo category mới</td></tr>
+      <tr><td><span class="method PUT" style="display:inline-block">PUT</span></td><td><code>/api/v1/admin/categories/{id}</code></td><td>Cập nhật category</td></tr>
+      <tr><td><span class="method DELETE" style="display:inline-block">DELETE</span></td><td><code>/api/v1/admin/categories/{id}</code></td><td>Xóa category</td></tr>
+      <tr><td><span class="method POST" style="display:inline-block">POST</span></td><td><code>/api/v1/admin/categories/{id}/problems</code></td><td>Gắn problems vào category</td></tr>
+      <tr><td><span class="method DELETE" style="display:inline-block">DELETE</span></td><td><code>/api/v1/admin/categories/{id}/problems/{problemId}</code></td><td>Gỡ problem khỏi category</td></tr>
+    </table>
+    <p style="color:var(--muted);font-size:13.5px">Topics và Categories có cấu trúc giống nhau. Topics dùng để phân loại theo thuật toán/kỹ thuật; Categories dùng để phân loại theo chủ đề/lĩnh vực.</p>
   </div>
 
   <!-- Webhook -->

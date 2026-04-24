@@ -13,6 +13,7 @@ import java.util.List;
 @Builder
 public class SubmissionResponse {
     private String submissionId;
+    private String problemSlug;
     private String status;
     private int score;
     private Integer timeMs;
@@ -36,6 +37,7 @@ public class SubmissionResponse {
 
         return SubmissionResponse.builder()
                 .submissionId(s.getId())
+                .problemSlug(s.getProblem() != null ? s.getProblem().getSlug() : null)
                 .status(s.getStatus())
                 .score(s.getScore())
                 .timeMs(s.getTimeMs())
