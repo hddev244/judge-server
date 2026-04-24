@@ -12,6 +12,8 @@
 - **Subtask scoring** — nhóm test case theo subtask, chấm all-or-nothing
 - **Custom checker** — special judge: compile checker C++/Java/Python, chạy với `<input> <expected> <actual>`
 - **Import problem từ ZIP** — `problem.yml` + `tests/*.in/*.out` + `subtasks.yml` + `checker.cpp`
+- **Problem status 3 cấp** — `PRIVATE` (draft) · `PUBLIC` (luyện tập) · `CONTEST` (thi)
+- **Allowed languages** — giới hạn ngôn ngữ cho phép submit theo từng bài
 - **Problem tags & difficulty** — gán tags (dp, greedy, ...) và độ khó (easy/medium/hard), tìm kiếm/lọc
 - **Topics & Categories** — phân loại bài theo chủ đề và dạng đề, lọc kết hợp trong search
 - **Contest mode** — tạo contest, đăng ký thí sinh, submit theo contest, bảng điểm với penalty
@@ -182,10 +184,42 @@ stompClient.connect({}, () => {
 
 REST endpoint `GET /api/v1/submissions/{id}` vẫn hoạt động bình thường (backward compatible).
 
+## Problem Status
+
+Mỗi problem có một trong 3 trạng thái:
+
+| Status | Người dùng thấy | Submit / Test Run |
+|--------|-----------------|-------------------|
+| `PRIVATE` | Không (chỉ admin) | ❌ 404 |
+| `PUBLIC` | Có — xuất hiện trong search và `/problems/{slug}` | ✅ |
+| `CONTEST` | Không qua public search | ✅ (không cần contestId) |
+
+```bash
+# Admin đổi trạng thái
+POST /api/v1/admin/problems/{id}/publish    # → PUBLIC
+POST /api/v1/admin/problems/{id}/contest    # → CONTEST
+POST /api/v1/admin/problems/{id}/unpublish  # → PRIVATE
+
+# Admin lọc theo trạng thái
+GET /api/v1/admin/problems?status=CONTEST
+```
+
+## Allowed Languages
+
+```bash
+# Tạo/sửa problem — chỉ cho phép cpp và java
+curl -X POST .../api/v1/admin/problems \
+  -d '{ ..., "allowedLanguages": ["cpp","java"] }'
+
+# null hoặc bỏ trống = tất cả ngôn ngữ cho phép
+# Submit sai ngôn ngữ → 400 BAD_REQUEST
+```
+
 ## Problem Search
 
 ```bash
 # Tất cả params đều optional, có thể kết hợp tùy ý
+# Chỉ trả bài PUBLIC
 GET /api/v1/problems?q=tổng&tags=dp,greedy&difficulty=medium&topicSlug=dp&categorySlug=graph-theory&page=0&size=20
 ```
 
@@ -203,9 +237,11 @@ GET /api/v1/problems?q=tổng&tags=dp,greedy&difficulty=medium&topicSlug=dp&cate
 {
   "content": [{
     "id": 1, "slug": "a-plus-b", "title": "A + B",
+    "status": "PUBLIC",
     "difficulty": "easy", "tags": ["math"],
     "topics": [{ "id": 1, "name": "Dynamic Programming", "slug": "dp" }],
     "categories": [{ "id": 1, "name": "Graph Theory", "slug": "graph-theory" }],
+    "allowedLanguages": ["cpp", "java"],
     "solvedCount": 42, "acceptanceRate": 78.5
   }],
   "totalElements": 42, "page": 0, "size": 20
@@ -460,6 +496,8 @@ curl -X POST http://localhost:8080/api/v1/submissions \
 curl http://localhost:8080/api/v1/submissions/sub_xxxxxxxxxx \
   -H "X-API-Key: YOUR_KEY"
 ```
+
+Response submission có field `problemSlug` — tiện cho proxy/backend build fallback stats mà không cần tra thêm.
 
 Verdicts: `AC` · `WA` · `TLE` · `MLE` · `RE` · `CE` · `SE` · `PENDING` · `JUDGING`
 
