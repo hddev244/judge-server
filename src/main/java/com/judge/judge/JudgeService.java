@@ -219,8 +219,8 @@ public class JudgeService {
         }
 
         Problem problem = problemRepository.findById(req.getProblemId())
-                .filter(Problem::isPublished)
-                .orElseThrow(() -> JudgeException.notFound("Problem not found or not published"));
+                .filter(p -> !"PRIVATE".equals(p.getStatus()))
+                .orElseThrow(() -> JudgeException.notFound("Problem not found or not available"));
 
         List<TestCase> samples = testCaseRepository
                 .findByProblemIdOrderByOrderIndexAsc(problem.getId())
