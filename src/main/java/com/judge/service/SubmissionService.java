@@ -42,9 +42,6 @@ public class SubmissionService {
         if ("PRIVATE".equals(problemStatus)) {
             throw JudgeException.notFound("Problem not found or not available");
         }
-        if ("CONTEST".equals(problemStatus) && req.getContestId() == null) {
-            throw JudgeException.badRequest("This problem is only available within a contest");
-        }
 
         if (problem.getAllowedLanguages() != null && !problem.getAllowedLanguages().isBlank()) {
             List<String> allowed = java.util.Arrays.asList(problem.getAllowedLanguages().split(","));
