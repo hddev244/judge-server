@@ -116,6 +116,14 @@ public class AdminProblemController {
         return ResponseEntity.ok(problemService.listSubtasks(id));
     }
 
+    @PatchMapping("/{id}/subtasks/{subtaskId}")
+    public ResponseEntity<SubtaskResponse> patchSubtask(
+            @PathVariable Long id, @PathVariable Long subtaskId,
+            @RequestBody @Valid SubtaskPatchRequest req) {
+        requireAdmin();
+        return ResponseEntity.ok(problemService.patchSubtask(id, subtaskId, req));
+    }
+
     @DeleteMapping("/{id}/subtasks/{subtaskId}")
     public ResponseEntity<Void> deleteSubtask(@PathVariable Long id,
                                                @PathVariable Long subtaskId) {
@@ -143,6 +151,21 @@ public class AdminProblemController {
     public ResponseEntity<List<TestCaseResponse>> listTestCases(@PathVariable Long id) {
         requireAdmin();
         return ResponseEntity.ok(problemService.listTestCases(id));
+    }
+
+    @GetMapping("/{id}/test-cases/{tcId}")
+    public ResponseEntity<TestCaseDetailResponse> getTestCase(
+            @PathVariable Long id, @PathVariable Long tcId) throws IOException {
+        requireAdmin();
+        return ResponseEntity.ok(problemService.getTestCase(id, tcId));
+    }
+
+    @PatchMapping("/{id}/test-cases/{tcId}")
+    public ResponseEntity<TestCaseResponse> patchTestCase(
+            @PathVariable Long id, @PathVariable Long tcId,
+            @RequestBody @Valid TestCasePatchRequest req) {
+        requireAdmin();
+        return ResponseEntity.ok(problemService.patchTestCase(id, tcId, req));
     }
 
     @DeleteMapping("/{id}/test-cases/{caseId}")

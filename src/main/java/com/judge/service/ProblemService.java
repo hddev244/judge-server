@@ -271,6 +271,55 @@ public class ProblemService {
                 .stream().map(TestCaseResponse::from).toList();
     }
 
+    @Transactional(readOnly = true)
+    public TestCaseDetailResponse getTestCase(Long problemId, Long caseId) throws IOException {
+        getOrThrow(problemId);
+        TestCase tc = testCaseRepository.findById(caseId)
+                .orElseThrow(() -> JudgeException.notFound("Test case not found: " + caseId));
+        if (!tc.getProblem().getId().equals(problemId)) {
+            throw JudgeException.forbidden("Test case does not belong to this problem");
+        }
+        String inputContent = Files.readString(Path.of(tc.getInputPath()));
+        String outputContent = Files.readString(Path.of(tc.getOutputPath()));
+        return TestCaseDetailResponse.from(tc, inputContent, outputContent);
+    }
+
+    @Transactional
+    public TestCaseResponse patchTestCase(Long problemId, Long caseId, TestCasePatchRequest req) {
+        getOrThrow(problemId);
+        TestCase tc = testCaseRepository.findById(caseId)
+                .orElseThrow(() -> JudgeException.notFound("Test case not found: " + caseId));
+        if (!tc.getProblem().getId().equals(problemId)) {
+            throw JudgeException.forbidden("Test case does not belong to this problem");
+        }
+        if (req.getScore() != null) tc.setScore(req.getScore());
+        if (req.getIsSample() != null) tc.setSample(req.getIsSample());
+        if (req.isClearSubtask()) {
+            tc.setSubtask(null);
+        } else if (req.getSubtaskId() != null) {
+            Subtask subtask = subtaskRepository.findById(req.getSubtaskId())
+                    .orElseThrow(() -> JudgeException.notFound("Subtask not found: " + req.getSubtaskId()));
+            if (!subtask.getProblem().getId().equals(problemId)) {
+                throw JudgeException.forbidden("Subtask does not belong to this problem");
+            }
+            tc.setSubtask(subtask);
+        }
+        return TestCaseResponse.from(testCaseRepository.save(tc));
+    }
+
+    @Transactional
+    public SubtaskResponse patchSubtask(Long problemId, Long subtaskId, SubtaskPatchRequest req) {
+        getOrThrow(problemId);
+        Subtask subtask = subtaskRepository.findById(subtaskId)
+                .orElseThrow(() -> JudgeException.notFound("Subtask not found: " + subtaskId));
+        if (!subtask.getProblem().getId().equals(problemId)) {
+            throw JudgeException.forbidden("Subtask does not belong to this problem");
+        }
+        if (req.getName() != null && !req.getName().isBlank()) subtask.setName(req.getName());
+        if (req.getScore() != null) subtask.setScore(req.getScore());
+        return SubtaskResponse.from(subtaskRepository.save(subtask));
+    }
+
     @Transactional
     public void deleteTestCase(Long problemId, Long caseId) {
         getOrThrow(problemId);
