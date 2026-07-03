@@ -12,6 +12,9 @@ import org.springframework.util.AntPathMatcher;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -19,7 +22,7 @@ import java.util.Optional;
 public class ApiKeyFilter extends OncePerRequestFilter {
 
     private static final List<String> EXCLUDED = List.of(
-            "/actuator/**", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html",
+            "/actuator/health", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html",
             "/*.html", "/**.html",
             "/api/v1/leaderboard", "/api/v1/users/*/stats",
             "/api/v1/contests", "/api/v1/contests/**",
@@ -49,7 +52,7 @@ public class ApiKeyFilter extends OncePerRequestFilter {
                                     FilterChain chain) throws ServletException, IOException {
         String rawKey = request.getHeader("X-API-Key");
         Optional<ApiKey> apiKey = rawKey != null
-                ? apiKeyRepository.findByKeyAndIsActiveTrue(rawKey)
+                ? apiKeyRepository.findByKeyHashAndIsActiveTrue(sha256Hex(rawKey))
                 : Optional.empty();
 
         if (apiKey.isEmpty()) {
@@ -65,6 +68,18 @@ public class ApiKeyFilter extends OncePerRequestFilter {
             chain.doFilter(request, response);
         } finally {
             ApiKeyContext.clear();
+        }
+    }
+
+    public static String sha256Hex(String value) {
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest(value.getBytes(StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder(digest.length * 2);
+            for (byte b : digest) sb.append(String.format("%02x", b));
+            return sb.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 unavailable", e);
         }
     }
 }

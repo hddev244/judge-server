@@ -16,6 +16,7 @@ public class JudgeConfig {
     private String workBase = "/tmp/judge";
     private String queueKey = "judge:queue";
     private String testcaseBasePath = "/data/problems";
+    private long outputLimitBytes = 1_048_576;
     private Map<String, LanguageConfig> languages = new LinkedHashMap<>();
 
     @Data

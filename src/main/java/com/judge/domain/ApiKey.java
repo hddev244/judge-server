@@ -16,8 +16,11 @@ public class ApiKey {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, unique = true, length = 64)
-    private String key;
+    @Column(name = "key_hash", nullable = false, unique = true, length = 64)
+    private String keyHash;
+
+    @Column(name = "key_prefix", nullable = false, length = 8)
+    private String keyPrefix;
 
     @Column(name = "client_name", nullable = false, length = 100)
     private String clientName;

@@ -29,6 +29,7 @@ public class DockerRunner {
         JudgeConfig.LanguageConfig lang = getLanguageConfig(language);
         Path workDir = Path.of(judgeConfig.getWorkBase(), jobId);
         Files.createDirectories(workDir);
+        makeWritableByAll(workDir);
 
         Files.writeString(workDir.resolve(lang.getSourceFile()), sourceCode);
 
@@ -67,16 +68,14 @@ public class DockerRunner {
         int cpuSecs = Math.max(timeLimitMs / 1000 + 1, 2);
         String runCmd = lang.getRunCmd().replace("{mem}", String.valueOf(memMb));
 
-        List<String> cmd = new ArrayList<>(List.of(
-                "docker", "run", "--rm",
-                "--network", "none",
+        List<String> cmd = new ArrayList<>(List.of("docker", "run", "--rm"));
+        cmd.addAll(baseSandboxFlags());
+        cmd.addAll(List.of(
                 "--memory", memMb + "m",
                 "--memory-swap", memMb + "m",
                 "--cpus", "0.5",
                 "--pids-limit", "64",
                 "--ulimit", "cpu=" + cpuSecs + ":" + cpuSecs,
-                "--read-only",
-                "--tmpfs", "/tmp:size=64m",
                 "-v", workDir + ":/code:ro",
                 "-v", inputPath + ":/input.txt:ro",
                 "-w", "/code",
@@ -118,6 +117,7 @@ public class DockerRunner {
         JudgeConfig.LanguageConfig lang = getLanguageConfig(language);
         Path checkerDir = Path.of(judgeConfig.getTestcaseBasePath(), String.valueOf(problemId), "checker");
         Files.createDirectories(checkerDir);
+        makeWritableByAll(checkerDir);
 
         Files.writeString(checkerDir.resolve(lang.getSourceFile()), sourceCode);
 
@@ -162,10 +162,12 @@ public class DockerRunner {
                 ? "/checker/solution /input.txt /expected.txt /actual.txt"
                 : "java -cp /checker Checker /input.txt /expected.txt /actual.txt";
 
-        List<String> cmd = List.of(
-                "docker", "run", "--rm",
-                "--network", "none",
+        List<String> cmd = new ArrayList<>(List.of("docker", "run", "--rm"));
+        cmd.addAll(baseSandboxFlags());
+        cmd.addAll(List.of(
                 "--memory", "256m",
+                "--memory-swap", "256m",
+                "--pids-limit", "64",
                 "--cpus", "0.5",
                 "-v", checkerDir.toString() + ":/checker:ro",
                 "-v", inputPath + ":/input.txt:ro",
@@ -173,7 +175,7 @@ public class DockerRunner {
                 "-v", actualFile.toString() + ":/actual.txt:ro",
                 image,
                 "/bin/sh", "-c", checkerCmd
-        );
+        ));
 
         ProcessResult result = runProcess(cmd, 10_000);
         return result.exitCode() == 0 ? "AC" : "WA";
@@ -194,10 +196,41 @@ public class DockerRunner {
         return lang;
     }
 
-    private List<String> buildDockerCmd(String image, String workDir, String shellCmd, boolean rw) {
-        List<String> cmd = new ArrayList<>(List.of(
-                "docker", "run", "--rm",
+    /**
+     * Flags shared by every sandbox container (run, compile, checker):
+     * no network, no capabilities, no privilege escalation, non-root user,
+     * read-only root fs with a small writable /tmp, bounded fds and file sizes.
+     */
+    private List<String> baseSandboxFlags() {
+        return List.of(
                 "--network", "none",
+                "--cap-drop", "ALL",
+                "--security-opt", "no-new-privileges",
+                "--user", "1000:1000",
+                "--ulimit", "nofile=256:256",
+                "--ulimit", "fsize=67108864",
+                "--read-only",
+                "--tmpfs", "/tmp:size=64m"
+        );
+    }
+
+    /** Sandbox runs as uid 1000; dirs created by the (root) API process must be opened up. */
+    private static void makeWritableByAll(Path dir) {
+        try {
+            Files.setPosixFilePermissions(dir,
+                    java.nio.file.attribute.PosixFilePermissions.fromString("rwxrwxrwx"));
+        } catch (IOException e) {
+            log.warn("Failed to chmod {}", dir, e);
+        }
+    }
+
+    private List<String> buildDockerCmd(String image, String workDir, String shellCmd, boolean rw) {
+        List<String> cmd = new ArrayList<>(List.of("docker", "run", "--rm"));
+        cmd.addAll(baseSandboxFlags());
+        cmd.addAll(List.of(
+                "--memory", "1g",
+                "--memory-swap", "1g",
+                "--pids-limit", "128",
                 "-v", workDir + ":/code" + (rw ? "" : ":ro"),
                 "-w", "/code",
                 image,
@@ -211,19 +244,14 @@ public class DockerRunner {
                 .redirectErrorStream(false)
                 .start();
 
+        long cap = judgeConfig.getOutputLimitBytes();
         StringBuilder stdout = new StringBuilder();
         StringBuilder stderr = new StringBuilder();
 
-        Thread outReader = new Thread(() -> {
-            try (BufferedReader r = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-                r.lines().forEach(l -> stdout.append(l).append("\n"));
-            } catch (IOException ignored) {}
-        });
-        Thread errReader = new Thread(() -> {
-            try (BufferedReader r = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
-                r.lines().forEach(l -> stderr.append(l).append("\n"));
-            } catch (IOException ignored) {}
-        });
+        // Bounded readers: keep at most `cap` bytes, drain the rest so the child
+        // never blocks on a full pipe but can't OOM this JVM either.
+        Thread outReader = new Thread(() -> readBounded(process.getInputStream(), stdout, cap));
+        Thread errReader = new Thread(() -> readBounded(process.getErrorStream(), stderr, cap));
         outReader.start();
         errReader.start();
 
@@ -241,10 +269,25 @@ public class DockerRunner {
             return new ProcessResult("", "", 124, true);
         }
 
-        try { outReader.join(500); } catch (InterruptedException ignored) {}
-        try { errReader.join(500); } catch (InterruptedException ignored) {}
+        try { outReader.join(5000); } catch (InterruptedException ignored) {}
+        try { errReader.join(5000); } catch (InterruptedException ignored) {}
 
         return new ProcessResult(stdout.toString(), stderr.toString(), process.exitValue(), false);
+    }
+
+    private static void readBounded(InputStream in, StringBuilder sink, long cap) {
+        byte[] buf = new byte[8192];
+        long total = 0;
+        try {
+            int n;
+            while ((n = in.read(buf)) != -1) {
+                if (total < cap) {
+                    int take = (int) Math.min(n, cap - total);
+                    sink.append(new String(buf, 0, take, java.nio.charset.StandardCharsets.UTF_8));
+                }
+                total += n;
+            }
+        } catch (IOException ignored) {}
     }
 
     private void deleteRecursively(Path path) throws IOException {

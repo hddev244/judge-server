@@ -501,6 +501,22 @@ Response submission có field `problemSlug` — tiện cho proxy/backend build f
 
 Verdicts: `AC` · `WA` · `TLE` · `MLE` · `RE` · `CE` · `SE` · `PENDING` · `JUDGING`
 
+> **API key**: chỉ hash SHA-256 của key được lưu trong DB (`api_keys.key_hash`),
+> raw key **chỉ hiển thị một lần** trong response tạo key — lưu lại ngay, không lấy lại được.
+> Danh sách key chỉ trả về `keyPrefix` (8 ký tự đầu) để nhận diện.
+
+## Bảo mật Sandbox & Docker
+
+Sandbox chạy `docker run` với: `--network none`, `--cap-drop ALL`,
+`--security-opt no-new-privileges`, `--user 1000:1000`, `--read-only` + `--tmpfs /tmp`,
+giới hạn `--memory`/`--pids-limit`/`--ulimit nofile,fsize,cpu`, và cap output (`judge.output-limit-bytes`, mặc định 1 MB).
+
+judge-api **không** mount trực tiếp `/var/run/docker.sock`. Mọi lệnh Docker đi qua
+`docker-proxy` (`tecnativa/docker-socket-proxy`) chỉ mở CONTAINERS/POST/IMAGES/INFO/VERSION.
+Rủi ro còn lại: endpoint `containers/create` vẫn cho phép `-v` bind mount tuỳ ý, nên proxy
+**giảm** chứ chưa triệt tiêu hoàn toàn khả năng chạm tới host — cân nhắc rootless Docker
+hoặc runner riêng nếu chạy multi-tenant không tin cậy.
+
 ## Giao diện Web
 
 | URL | Mô tả |

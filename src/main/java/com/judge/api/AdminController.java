@@ -7,6 +7,7 @@ import com.judge.repository.ApiKeyRepository;
 import com.judge.repository.ProblemRepository;
 import com.judge.repository.SubmissionRepository;
 import com.judge.security.ApiKeyContext;
+import com.judge.security.ApiKeyFilter;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.*;
 import org.springframework.http.ResponseEntity;
@@ -47,13 +48,15 @@ public class AdminController {
         requireAdmin();
         String raw = "sk_" + UUID.randomUUID().toString().replace("-", "");
         ApiKey key = ApiKey.builder()
-                .key(raw)
+                .keyHash(ApiKeyFilter.sha256Hex(raw))
+                .keyPrefix(raw.substring(0, 8))
                 .clientName(req.getClientName())
                 .isActive(true)
                 .isAdmin(req.isAdmin())
                 .rateLimitPerHour(req.getRateLimitPerHour())
                 .build();
-        return ResponseEntity.status(201).body(ApiKeyResponse.from(apiKeyRepository.save(key)));
+        // Raw key is returned exactly once here; only its hash is stored.
+        return ResponseEntity.status(201).body(ApiKeyResponse.from(apiKeyRepository.save(key), raw));
     }
 
     @PatchMapping("/api-keys/{id}/deactivate")

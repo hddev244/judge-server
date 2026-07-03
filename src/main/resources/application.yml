@@ -38,6 +38,7 @@ judge:
   work-base: ${JUDGE_WORK_BASE:/tmp/judge}
   queue-key: ${JUDGE_QUEUE_KEY:judge:queue}
   testcase-base-path: ${JUDGE_TESTCASE_BASE_PATH:/data/problems}
+  output-limit-bytes: ${JUDGE_OUTPUT_LIMIT_BYTES:1048576}
   languages:
     cpp:
       image: ${JUDGE_LANG_CPP_IMAGE:gcc:13}
@@ -59,7 +60,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics
+        include: health
   endpoint:
     health:
       show-details: when-authorized

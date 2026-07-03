@@ -7,17 +7,34 @@ services:
       - .env
     environment:
       - SPRING_PROFILES_ACTIVE=docker
+      # Docker API goes through the socket proxy — the raw host socket is
+      # root-equivalent and must never be mounted into this container.
+      - DOCKER_HOST=tcp://docker-proxy:2375
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:rw
       - ${JUDGE_WORK_BASE:-/tmp/judge}:${JUDGE_WORK_BASE:-/tmp/judge}
       - ${JUDGE_TESTCASE_BASE_PATH:-/data/problems}:${JUDGE_TESTCASE_BASE_PATH:-/data/problems}
-    group_add:
-      - "999"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      docker-proxy:
+        condition: service_started
+    restart: unless-stopped
+
+  # Restricted gateway to the Docker daemon: only the endpoints `docker run --rm`
+  # needs (create/start/attach/wait + info). EXEC/BUILD/VOLUMES/etc stay denied,
+  # shrinking the blast radius of an RCE in judge-api.
+  docker-proxy:
+    image: tecnativa/docker-socket-proxy
+    environment:
+      CONTAINERS: 1
+      POST: 1
+      IMAGES: 1
+      INFO: 1
+      VERSION: 1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     restart: unless-stopped
 
   postgres:
