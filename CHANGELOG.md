@@ -2,6 +2,34 @@
 
 ## [Unreleased]
 
+### Đại tu độ tin cậy, bảo mật & lõi chấm (V18–V22)
+
+**Backup & vận hành**
+- Thêm `scripts/backup.sh` (pg_dump + test cases + `.env`, xoay vòng 14 bản, rclone lên cloud),
+  `restore.sh`, `rotate-db-password.sh`, `recompile-checkers.sh`; cron `deploy/cron/judge-backup`.
+- `docs/MIGRATION.md`: runbook chuyển máy chủ. Xoay `DB_PASSWORD` mặc định yếu.
+
+**Bảo mật (V18/V19)**
+- API key lưu **SHA-256** (`key_hash` + `key_prefix`), bỏ cột plaintext; raw key chỉ trả 1 lần.
+- Sandbox hardening: `--cap-drop ALL`, `no-new-privileges`, `--user 1000`, ulimit nofile/fsize,
+  read-only + tmpfs cho cả run/compile/checker. Giới hạn output (`judge.output-limit-bytes`).
+- Bỏ mount `docker.sock`; đi qua `tecnativa/docker-socket-proxy`. Actuator chỉ mở `/health`.
+
+**Lõi chấm**
+- Image sandbox dẫn xuất `judge-{cpp,java,python}:1` (GNU time + user non-root).
+- Đo **CPU time** (TLE) và **peak RSS** (MLE) thật qua GNU time; bỏ throttle `--cpus 0.5`;
+  hệ số thời gian theo ngôn ngữ; hỗ trợ time limit < 1s.
+
+**Độ tin cậy**
+- `judge()` bỏ `@Transactional`; ghi DB qua `SubmissionPersistenceService` (REQUIRES_NEW).
+- Lock Redis có token + gia hạn; `StuckSubmissionJob` reap bài kẹt; worker chống chết.
+- Rate limit chuyển sang **Redis** (bucket4j), bền qua restart.
+
+**Chấm nâng cao (V20/V21/V22)**
+- Sửa checker java/python; **điểm thành phần** (exit 7 + ratio); **bài interactive** (FIFO);
+  `judging_mode` (dừng sớm); comparator **FLOAT** với epsilon.
+- Bộ unit test đầu tiên dưới `src/test` (comparator, parse, hash, scoring).
+
 ### feat: 3-state problem status (PRIVATE / PUBLIC / CONTEST)
 
 **Migration**: V17 — thêm cột `status VARCHAR(10) NOT NULL DEFAULT 'PRIVATE'` vào `problems`; backfill từ `is_published` (`true → PUBLIC`, `false → PRIVATE`).

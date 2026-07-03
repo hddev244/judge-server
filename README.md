@@ -525,24 +525,83 @@ hoặc runner riêng nếu chạy multi-tenant không tin cậy.
 | `/solve.html` | Trang làm bài (Test Run + Submit + WebSocket verdict) |
 | `/docs.html` | API Documentation |
 
-## Subtask Scoring
+## Subtask Scoring & Partial Credit
 
-Test case thuộc subtask: subtask chỉ được điểm khi **tất cả** test case trong subtask đều AC.  
-Test case không thuộc subtask nào: tính điểm riêng từng case.
+Điểm mỗi case = `score × ratio` (ratio 0..1). Subtask dùng **min ratio** của các case
+trong nó (chuẩn IOI) — với checker EXACT (ratio 0/1) quy về "tất cả AC mới được điểm".
 
-## Custom Checker
+## Judging Mode (dừng sớm)
+
+Đặt `judgingMode` khi tạo/sửa problem:
+
+| Mode | Hành vi |
+|------|---------|
+| `ALL` (mặc định) | Chấm hết mọi test case |
+| `STOP_ON_FIRST_FAIL` | Dừng ngay khi 1 case non-AC; case còn lại = `SKIPPED` |
+| `SUBTASK_SKIP` | Bỏ các case còn lại của subtask đã fail |
+
+## So sánh output
+
+`comparisonMode`: `EXACT` (mặc định, chuẩn hoá khoảng trắng cuối dòng) hoặc `FLOAT`
+(so token số trong `floatEpsilon`, mặc định 1e-6).
+
+## Custom Checker (điểm thành phần)
+
+Upload: `POST /api/v1/admin/problems/{id}/checker?language=cpp&type=CUSTOM` (form-data `source`).
+Ngôn ngữ: `cpp` (→ `/checker/checker`), `java` (`Checker.java` → `java -cp /checker Checker`),
+`python` (`checker.py`). Gọi với 3 args: `input expected actual`.
+
+**Giao thức exit code:** `0` = AC · `1` = WA · `7` = PC (dòng đầu stdout là tỉ lệ 0..1) · khác = SE.
 
 ```cpp
-// checker.cpp — nhận 3 args: input expected actual; exit 0 = AC
+// checker.cpp — exit 0 AC / 1 WA / 7 kèm ratio ở stdout
 #include <bits/stdc++.h>
 using namespace std;
 int main(int argc, char* argv[]) {
     ifstream expected(argv[2]), actual(argv[3]);
-    double a, b;
-    expected >> a; actual >> b;
-    return abs(a - b) < 1e-6 ? 0 : 1;
+    double a, b; expected >> a; actual >> b;
+    if (a == b) return 0;
+    if (fabs(a - b) < 1.0) { printf("0.5\n"); return 7; }  // partial
+    return 1;
 }
 ```
+
+> Sau khi **chuyển máy chủ khác kiến trúc CPU**, chạy `scripts/recompile-checkers.sh` để
+> build lại binary checker (hoặc `POST /api/v1/admin/problems/{id}/recompile-checker`).
+
+## Bài Interactive
+
+Upload interactor: `POST .../checker?language=cpp&type=INTERACTIVE`. Interactor nhận 2 args
+`input answer`, giao tiếp với solution qua stdin/stdout (nhớ `fflush` sau mỗi lần in).
+Exit code = verdict (`0` AC / `1` WA / `7` PC, ratio ghi vào `/metrics/score.txt`).
+Solution và interactor chạy chung 1 container, nối bằng 2 FIFO.
+
+```cpp
+// interactor.cpp — đoán số: answer chứa số bí mật
+#include <cstdio>
+int main(int argc, char** argv) {
+    FILE* fa = fopen(argv[2], "r"); int secret; fscanf(fa, "%d", &secret);
+    int g, t = 0;
+    while (t++ < 50 && scanf("%d", &g) == 1) {
+        if (g == secret) { printf("correct\n"); fflush(stdout); return 0; }
+        printf(g < secret ? "higher\n" : "lower\n"); fflush(stdout);
+    }
+    return 1;  // WA
+}
+```
+
+## Backup, khôi phục & chuyển máy chủ
+
+- `scripts/backup.sh` — pg_dump + test cases + `.env`, xoay vòng 14 bản, đẩy cloud qua rclone.
+  Cron cài sẵn: `deploy/cron/judge-backup` (02:30 hằng đêm).
+- `scripts/restore.sh <backup_dir>` — khôi phục (kèm chế độ `--db` để verify vào DB scratch).
+- Chuyển sang máy chủ khác: xem **[`docs/MIGRATION.md`](./docs/MIGRATION.md)**.
+
+## Kiểm thử
+
+`mvn test` chạy unit test cho comparator (EXACT/FLOAT), parse GNU time, phát hiện lỗi Docker,
+hash API key, và scoring (subtask/partial/loose). Các luồng chấm end-to-end được kiểm chứng
+trực tiếp trên stack chạy thật (ma trận AC/WA/TLE/MLE/RE mỗi ngôn ngữ).
 
 ## Biến môi trường
 

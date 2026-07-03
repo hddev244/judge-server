@@ -38,6 +38,7 @@ public class JudgeService {
     private final JudgeStatusPublisher statusPublisher;
     private final CacheManager cacheManager;
     private final SubmissionPersistenceService persistence;
+    private final ScoringService scoringService;
 
     public JudgeService(SubmissionRepository submissionRepository,
                         TestCaseRepository testCaseRepository,
@@ -51,7 +52,8 @@ public class JudgeService {
                         JudgeConfig judgeConfig,
                         JudgeStatusPublisher statusPublisher,
                         CacheManager cacheManager,
-                        SubmissionPersistenceService persistence) {
+                        SubmissionPersistenceService persistence,
+                        ScoringService scoringService) {
         this.submissionRepository = submissionRepository;
         this.testCaseRepository = testCaseRepository;
         this.submissionResultRepository = submissionResultRepository;
@@ -65,6 +67,7 @@ public class JudgeService {
         this.statusPublisher = statusPublisher;
         this.cacheManager = cacheManager;
         this.persistence = persistence;
+        this.scoringService = scoringService;
     }
 
     private void evictLeaderboardCache() {
@@ -116,12 +119,9 @@ public class JudgeService {
                 return;
             }
 
-            // Per-case min-ratio per subtask (min-aggregation is standard IOI and
-            // reduces to all-or-nothing when ratios are 0/1 as in EXACT checking).
-            Map<Long, Double> subtaskMinRatio = new HashMap<>();
-            for (JudgeJob.SubtaskView st : job.subtasks()) subtaskMinRatio.put(st.id(), 1.0);
-            Set<Long> failedSubtasks = new HashSet<>();
+            // Ratio (0..1) awarded per test-case id; ScoringService aggregates it.
             Map<Long, Double> caseRatios = new HashMap<>();
+            Set<Long> failedSubtasks = new HashSet<>();
 
             String finalVerdict = "AC";
             long maxTimeMs = 0;
@@ -135,8 +135,7 @@ public class JudgeService {
                             || ("STOP_ON_FIRST_FAIL".equals(mode) && !"AC".equals(finalVerdict));
                 if (skip) {
                     persistence.saveResult(submissionId, tc.id(), "SKIPPED", 0, 0, 0.0);
-                    if (tc.subtaskId() != null) subtaskMinRatio.put(tc.subtaskId(), 0.0);
-                    else caseRatios.put(tc.id(), 0.0);
+                    caseRatios.put(tc.id(), 0.0);
                     continue;
                 }
 
@@ -168,11 +167,7 @@ public class JudgeService {
                         .build());
                 statusPublisher.publishPartial(submissionId, partialResults);
 
-                if (tc.subtaskId() != null) {
-                    subtaskMinRatio.merge(tc.subtaskId(), oc.ratio(), Math::min);
-                } else {
-                    caseRatios.put(tc.id(), oc.ratio());
-                }
+                caseRatios.put(tc.id(), oc.ratio());
                 if (!"AC".equals(oc.verdict())) {
                     if ("AC".equals(finalVerdict)) finalVerdict = oc.verdict();
                     if (tc.subtaskId() != null) failedSubtasks.add(tc.subtaskId());
@@ -180,17 +175,7 @@ public class JudgeService {
                 maxTimeMs = Math.max(maxTimeMs, caseTimeMs);
             }
 
-            int totalScore = 0;
-            for (JudgeJob.SubtaskView st : job.subtasks()) {
-                totalScore += (int) Math.round(st.score() * subtaskMinRatio.getOrDefault(st.id(), 0.0));
-            }
-            // Cases not attached to any subtask score individually by their ratio.
-            for (JudgeJob.TestCaseView tc : job.testCases()) {
-                if (tc.subtaskId() == null) {
-                    Double r = caseRatios.get(tc.id());
-                    if (r != null) totalScore += (int) Math.round(tc.score() * r);
-                }
-            }
+            int totalScore = scoringService.total(job.subtasks(), job.testCases(), caseRatios);
 
             String status = job.testCases().isEmpty() ? "AC" : finalVerdict;
             Submission s = persistence.finalizeSubmission(submissionId, status, totalScore, (int) maxTimeMs);
