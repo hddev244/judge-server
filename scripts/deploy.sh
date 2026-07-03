@@ -2,10 +2,8 @@
 set -e
 echo "=== Judge Server Deploy ==="
 
-echo "Pre-pulling sandbox images..."
-docker pull gcc:13
-docker pull eclipse-temurin:21
-docker pull python:3.12-slim
+echo "Building sandbox images (base pull + derived judge-*:1)..."
+"$(dirname "$0")/init-images.sh"
 
 docker compose build --no-cache judge-api
 docker compose up -d
