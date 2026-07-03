@@ -290,6 +290,10 @@ Khi tạo/cập nhật problem có thể gán đồng thời:
 
 Đây là cách tích hợp Judge Server vào **server backend A** (Node.js, Python, Spring, Go, ...) để gửi bài chấm và nhận kết quả.
 
+> **Đang tích hợp sẵn và vừa nâng cấp Judge Server?** Xem
+> **[`docs/CLIENT_UPGRADE.md`](./docs/CLIENT_UPGRADE.md)** — những thay đổi ảnh hưởng client
+> (verdict `PC`/`SKIPPED`, `memoryKb`/`timeMs` đổi nghĩa, API key chỉ trả 1 lần) và checklist cần làm.
+
 ### Bước 1 — Tạo API Key
 
 ```bash
