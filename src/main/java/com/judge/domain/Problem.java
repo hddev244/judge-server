@@ -69,6 +69,19 @@ public class Problem {
     @Column(name = "checker_bin_path", length = 500)
     private String checkerBinPath;
 
+    /** EXACT (default) or FLOAT (numeric tokens compared within floatEpsilon). */
+    @Column(name = "comparison_mode", nullable = false, length = 10)
+    @Builder.Default
+    private String comparisonMode = "EXACT";
+
+    @Column(name = "float_epsilon")
+    private Double floatEpsilon;
+
+    /** ALL (default) | STOP_ON_FIRST_FAIL | SUBTASK_SKIP. */
+    @Column(name = "judging_mode", nullable = false, length = 20)
+    @Builder.Default
+    private String judgingMode = "ALL";
+
     /** Comma-separated language keys, e.g. "cpp,java". NULL = all allowed. */
     @Column(name = "allowed_languages", length = 100)
     private String allowedLanguages;

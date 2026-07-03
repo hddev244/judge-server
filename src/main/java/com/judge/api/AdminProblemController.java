@@ -88,10 +88,11 @@ public class AdminProblemController {
     public ResponseEntity<ProblemResponse> uploadChecker(
             @PathVariable Long id,
             @RequestParam String language,
+            @RequestParam(defaultValue = "CUSTOM") String type,
             @RequestPart("source") MultipartFile source) throws IOException {
         requireAdmin();
         return ResponseEntity.ok(
-                problemService.uploadChecker(id, language, new String(source.getBytes())));
+                problemService.uploadChecker(id, language, type, new String(source.getBytes())));
     }
 
     @DeleteMapping("/{id}/checker")

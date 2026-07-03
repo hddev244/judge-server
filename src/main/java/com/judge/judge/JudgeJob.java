@@ -17,6 +17,8 @@ public record JudgeJob(
         String checkerType,
         String checkerLanguage,
         String checkerBinPath,
+        String comparisonMode,
+        Double floatEpsilon,
         String judgingMode,
         List<TestCaseView> testCases,
         List<SubtaskView> subtasks

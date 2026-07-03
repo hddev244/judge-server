@@ -62,6 +62,9 @@ public class ProblemService {
                 .memoryLimitKb(req.getMemoryLimitKb())
                 .difficulty(req.getDifficulty())
                 .allowedLanguages(toLanguageString(req.getAllowedLanguages()))
+                .comparisonMode(req.getComparisonMode() != null ? req.getComparisonMode() : "EXACT")
+                .floatEpsilon(req.getFloatEpsilon())
+                .judgingMode(req.getJudgingMode() != null ? req.getJudgingMode() : "ALL")
                 .status("PRIVATE")
                 .build();
         problem = problemRepository.save(problem);
@@ -81,6 +84,9 @@ public class ProblemService {
         problem.setMemoryLimitKb(req.getMemoryLimitKb());
         problem.setDifficulty(req.getDifficulty());
         problem.setAllowedLanguages(toLanguageString(req.getAllowedLanguages()));
+        if (req.getComparisonMode() != null) problem.setComparisonMode(req.getComparisonMode());
+        problem.setFloatEpsilon(req.getFloatEpsilon());
+        if (req.getJudgingMode() != null) problem.setJudgingMode(req.getJudgingMode());
         problem = problemRepository.save(problem);
         problemTagRepository.deleteByProblemId(id);
         List<String> tags = saveTags(problem, req.getTags());
@@ -336,10 +342,14 @@ public class ProblemService {
     // ─── Checker ───────────────────────────────────────────────────────────────
 
     @Transactional
-    public ProblemResponse uploadChecker(Long problemId, String language, String sourceCode) throws IOException {
+    public ProblemResponse uploadChecker(Long problemId, String language, String type,
+                                         String sourceCode) throws IOException {
         Problem problem = getOrThrow(problemId);
+        String checkerType = "INTERACTIVE".equalsIgnoreCase(type) ? "INTERACTIVE" : "CUSTOM";
+        // Interactor and standard checker share the compile pipeline (both produce
+        // /checker/checker); only the calling convention at judge time differs.
         String binPath = dockerRunner.compileChecker(language, sourceCode, problemId);
-        problem.setCheckerType("CUSTOM");
+        problem.setCheckerType(checkerType);
         problem.setCheckerLanguage(language);
         problem.setCheckerSource(sourceCode);
         problem.setCheckerBinPath(binPath);

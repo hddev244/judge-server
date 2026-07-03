@@ -31,4 +31,8 @@ public class SubmissionResult {
 
     @Column(name = "memory_kb")
     private Integer memoryKb;
+
+    /** Fraction of the case score awarded (0..1). NULL treated as 1.0 for AC. */
+    @Column(name = "score_ratio")
+    private Double scoreRatio;
 }

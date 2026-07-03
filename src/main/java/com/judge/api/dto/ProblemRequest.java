@@ -35,4 +35,13 @@ public class ProblemRequest {
 
     /** null or empty = all languages allowed */
     private List<String> allowedLanguages;
+
+    @Pattern(regexp = "EXACT|FLOAT", message = "comparisonMode must be EXACT or FLOAT")
+    private String comparisonMode = "EXACT";
+
+    private Double floatEpsilon;
+
+    @Pattern(regexp = "ALL|STOP_ON_FIRST_FAIL|SUBTASK_SKIP",
+            message = "judgingMode must be ALL, STOP_ON_FIRST_FAIL or SUBTASK_SKIP")
+    private String judgingMode = "ALL";
 }

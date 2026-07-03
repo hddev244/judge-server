@@ -1,7 +1,9 @@
 package com.judge.judge;
 
 import com.judge.config.JudgeConfig;
+import com.judge.judge.model.CheckerResult;
 import com.judge.judge.model.CompileResult;
+import com.judge.judge.model.InteractiveResult;
 import com.judge.judge.model.RunResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -211,57 +213,70 @@ public class DockerRunner {
 
     record RunMetrics(long wallTimeMs, long cpuTimeMs, long maxRssKb, int exitStatus) {}
 
+    // Checker source/binary names are independent of the solution's LanguageConfig.
+    private static String checkerSourceName(String language) {
+        return switch (language) {
+            case "cpp" -> "checker.cpp";
+            case "java" -> "Checker.java";
+            case "python" -> "checker.py";
+            default -> throw new IllegalArgumentException("Unsupported checker language: " + language);
+        };
+    }
+
+    private String checkerImage(String language) {
+        JudgeConfig.LanguageConfig lang = judgeConfig.getLanguages().get(language);
+        String image = lang != null ? lang.getImage() : null;
+        return image != null ? image : "judge-cpp:1";
+    }
+
     /**
-     * Compiles a custom checker. Returns the path to the checker binary, or throws on failure.
+     * Compiles a custom checker (or interactor). Returns the checker directory,
+     * which is stored as checker_bin_path. Throws on compile failure.
      */
     public String compileChecker(String language, String sourceCode, Long problemId) throws IOException {
-        JudgeConfig.LanguageConfig lang = getLanguageConfig(language);
         Path checkerDir = Path.of(judgeConfig.getTestcaseBasePath(), String.valueOf(problemId), "checker");
         Files.createDirectories(checkerDir);
         makeWritableByAll(checkerDir);
 
-        Files.writeString(checkerDir.resolve(lang.getSourceFile()), sourceCode);
+        Files.writeString(checkerDir.resolve(checkerSourceName(language)), sourceCode);
 
-        if (lang.getCompileCmd() != null && !lang.getCompileCmd().isBlank()) {
-            List<String> cmd = buildDockerCmd(lang.getImage(), checkerDir.toString(), lang.getCompileCmd(), true);
-            ProcessResult result = runProcess(cmd, 60_000);
+        String compileCmd = switch (language) {
+            case "cpp" -> "g++ -O2 -std=c++17 -o checker checker.cpp";
+            case "java" -> "javac Checker.java";
+            case "python" -> null;   // interpreted
+            default -> throw new IllegalArgumentException("Unsupported checker language: " + language);
+        };
+        if (compileCmd != null) {
+            List<String> cmd = buildDockerCmd(checkerImage(language), checkerDir.toString(), compileCmd, true);
+            ProcessResult result = runProcess(cmd, judgeConfig.getCompileTimeoutMs());
             if (result.exitCode() != 0) {
                 String err = result.stderr().isBlank() ? result.stdout() : result.stderr();
                 throw new IOException("Checker compilation failed: " + err);
             }
         }
-
-        // Return the directory; checker binary name depends on language
-        String binaryName = switch (language) {
-            case "cpp" -> "solution";
-            case "java" -> "checker_dir";
-            default -> "checker_dir";
-        };
-        return checkerDir.resolve(binaryName).toString();
+        return checkerDir.toString();
     }
 
     /**
-     * Runs a custom checker. Returns "AC" if exit code 0, "WA" otherwise.
-     * Checker is called with: checker <input> <expected> <actual>
+     * Runs a custom checker: {@code checker <input> <expected> <actual>}.
+     * Exit 0 = AC, 1 = WA, 7 = partial (first stdout line = 0..1 ratio), else SE.
      */
-    public String runChecker(String checkerBinPath, String inputPath, String expectedPath,
-                             String actualOutput, String workDir) throws IOException {
-        Path checkerDir = Path.of(checkerBinPath).getParent();
+    public CheckerResult runChecker(String checkerDirPath, String checkerLanguage,
+                                    String inputPath, String expectedPath,
+                                    String actualOutput, String workDir) throws IOException {
+        Path checkerDir = Path.of(checkerDirPath);
+        // Legacy rows stored the binary path, not the dir — tolerate both.
+        if (!Files.isDirectory(checkerDir)) checkerDir = checkerDir.getParent();
         Path actualFile = Path.of(workDir, "actual.txt");
         Files.writeString(actualFile, actualOutput);
 
-        // Determine language from checker directory
-        boolean isCpp = Files.exists(checkerDir.resolve("solution"));
-        String image = isCpp
-                ? judgeConfig.getLanguages().getOrDefault("cpp",
-                    new JudgeConfig.LanguageConfig()).getImage()
-                : judgeConfig.getLanguages().getOrDefault("java",
-                    new JudgeConfig.LanguageConfig()).getImage();
-        if (image == null) image = "gcc:13";
-
-        String checkerCmd = isCpp
-                ? "/checker/solution /input.txt /expected.txt /actual.txt"
-                : "java -cp /checker Checker /input.txt /expected.txt /actual.txt";
+        String lang = checkerLanguage != null ? checkerLanguage : "cpp";
+        String checkerCmd = switch (lang) {
+            case "cpp" -> "/checker/checker /input.txt /expected.txt /actual.txt";
+            case "java" -> "java -cp /checker Checker /input.txt /expected.txt /actual.txt";
+            case "python" -> "python3 /checker/checker.py /input.txt /expected.txt /actual.txt";
+            default -> "/checker/checker /input.txt /expected.txt /actual.txt";
+        };
 
         List<String> cmd = new ArrayList<>(List.of("docker", "run", "--rm"));
         cmd.addAll(baseSandboxFlags());
@@ -269,17 +284,140 @@ public class DockerRunner {
                 "--memory", "256m",
                 "--memory-swap", "256m",
                 "--pids-limit", "64",
-                "--cpus", "0.5",
+                "--cpus", fmt(judgeConfig.getSandboxCpus()),
                 "-v", checkerDir.toString() + ":/checker:ro",
                 "-v", inputPath + ":/input.txt:ro",
                 "-v", expectedPath + ":/expected.txt:ro",
                 "-v", actualFile.toString() + ":/actual.txt:ro",
-                image,
+                checkerImage(lang),
                 "/bin/sh", "-c", checkerCmd
         ));
 
         ProcessResult result = runProcess(cmd, 10_000);
-        return result.exitCode() == 0 ? "AC" : "WA";
+        return switch (result.exitCode()) {
+            case 0 -> CheckerResult.ac();
+            case 1 -> CheckerResult.wa();
+            case 7 -> CheckerResult.pc(parseRatio(result.stdout()));
+            default -> CheckerResult.se();
+        };
+    }
+
+    private static double parseRatio(String stdout) {
+        if (stdout == null || stdout.isBlank()) return 0.0;
+        try {
+            return Double.parseDouble(stdout.lines().findFirst().orElse("0").trim());
+        } catch (NumberFormatException e) {
+            return 0.0;
+        }
+    }
+
+    /**
+     * Interactive judging: the solution and a compiled interactor talk over two
+     * FIFOs inside one hardened container. The interactor is passed the input and
+     * expected-answer files and its exit code is the verdict (0 AC / 1 WA /
+     * 7 partial with the ratio in /metrics/score.txt). Solution TLE/MLE/RE take
+     * precedence over the interactor's verdict.
+     */
+    public InteractiveResult runInteractive(String workDir, String language,
+                                            String checkerDirPath, String checkerLanguage,
+                                            String inputPath, String answerPath,
+                                            int timeLimitMs, int memoryKb) {
+        JudgeConfig.LanguageConfig lang = getLanguageConfig(language);
+        double multiplier = lang.getTimeMultiplier() > 0 ? lang.getTimeMultiplier() : 1.0;
+        long effectiveLimitMs = Math.round(timeLimitMs * multiplier);
+        int memMb = (int) Math.max((memoryKb + lang.getMemoryBonusKb()) / 1024, 64);
+        int cpuSecs = (int) Math.max(effectiveLimitMs / 1000 + 1, 2);
+        double wallSecs = effectiveLimitMs / 1000.0 + 1.0;
+        String runCmd = lang.getRunCmd().replace("{mem}", String.valueOf(memMb));
+
+        Path checkerDir = Path.of(checkerDirPath);
+        if (!Files.isDirectory(checkerDir)) checkerDir = checkerDir.getParent();
+        Path metricsDir = Path.of(workDir, "metrics");
+        try {
+            Files.createDirectories(metricsDir);
+            makeWritableByAll(metricsDir);
+        } catch (IOException e) {
+            return new InteractiveResult("SE", 0, 0, 0, true);
+        }
+
+        String clang = checkerLanguage != null ? checkerLanguage : "cpp";
+        String interactorCmd = switch (clang) {
+            case "java" -> "java -cp /checker Checker /input.txt /answer.txt";
+            case "python" -> "python3 /checker/checker.py /input.txt /answer.txt";
+            default -> "/checker/checker /input.txt /answer.txt";
+        };
+        // FIFO open order matters: both the interactor and the solution must first
+        // rendezvous on i2s (interactor opens it for WRITE, solution for READ) or the
+        // two O_RDONLY opens deadlock. Hence interactor lists `> i2s` before `< s2i`.
+        String inner = String.join("\n",
+                "mkfifo /tmp/s2i /tmp/i2s",
+                interactorCmd + " > /tmp/i2s < /tmp/s2i & IPID=$!",
+                "timeout " + fmt(wallSecs) + " /usr/bin/time -q -f '%e %U %S %M %x' -o /metrics/run.txt"
+                        + " /bin/sh -c '" + runCmd + "' < /tmp/i2s > /tmp/s2i 2> /metrics/err.txt",
+                "wait $IPID; echo $? > /metrics/interactor_exit.txt");
+
+        List<String> cmd = new ArrayList<>(List.of("docker", "run", "--rm"));
+        cmd.addAll(baseSandboxFlags());
+        cmd.addAll(List.of(
+                "--memory", memMb + "m",
+                "--memory-swap", memMb + "m",
+                "--cpus", fmt(judgeConfig.getSandboxCpus()),
+                "--pids-limit", "64",
+                "--ulimit", "cpu=" + cpuSecs + ":" + cpuSecs,
+                "-v", workDir + ":/code:ro",
+                "-v", checkerDir.toString() + ":/checker:ro",
+                "-v", metricsDir.toString() + ":/metrics",
+                "-v", inputPath + ":/input.txt:ro",
+                "-v", answerPath + ":/answer.txt:ro",
+                "-w", "/code",
+                lang.getImage(),
+                "/bin/sh", "-c", inner
+        ));
+
+        try {
+            ProcessResult result = runProcess(cmd, effectiveLimitMs + 5000L);
+            if (isDockerDaemonError(result.stderr())) {
+                return new InteractiveResult("SE", 0, 0, 0, true);
+            }
+            RunMetrics m = parseMetrics(readMetricsFile(metricsDir, "run.txt"));
+            long memKb = m != null ? m.maxRssKb() : 0;
+            long cpuMs = m != null ? m.cpuTimeMs() : 0;
+
+            // Real resource limits take precedence over anything the interactor says.
+            if (result.timedOut() || result.exitCode() == 124
+                    || (m != null && cpuMs > effectiveLimitMs)) {
+                return new InteractiveResult("TLE", 0, cpuMs, memKb, false);
+            }
+            if (memoryKb > 0 && memKb >= memoryKb) {
+                return new InteractiveResult("MLE", 0, cpuMs, memKb, false);
+            }
+
+            // The interactor's verdict is authoritative: once it decides WA/PC it
+            // closes the pipe, so the solution hitting EOF and exiting non-zero is
+            // expected, not a genuine RE.
+            int interactorExit = parseIntSafe(readMetricsFile(metricsDir, "interactor_exit.txt"), -1);
+            int solExit = m != null ? m.exitStatus() : result.exitCode();
+            return switch (interactorExit) {
+                case 0 -> solExit != 0
+                        ? new InteractiveResult("RE", 0, cpuMs, memKb, false)  // interactor happy but solution crashed
+                        : new InteractiveResult("AC", 1.0, cpuMs, memKb, false);
+                case 1 -> new InteractiveResult("WA", 0.0, cpuMs, memKb, false);
+                case 7 -> {
+                    double ratio = parseRatio(readMetricsFile(metricsDir, "score.txt"));
+                    yield new InteractiveResult(ratio >= 1.0 ? "AC" : "PC", Math.max(0, Math.min(1, ratio)),
+                            cpuMs, memKb, false);
+                }
+                default -> new InteractiveResult("SE", 0, cpuMs, memKb, true);
+            };
+        } catch (IOException e) {
+            log.error("Interactive run failed, workDir={}", workDir, e);
+            return new InteractiveResult("SE", 0, 0, 0, true);
+        }
+    }
+
+    private static int parseIntSafe(String s, int def) {
+        if (s == null || s.isBlank()) return def;
+        try { return Integer.parseInt(s.trim()); } catch (NumberFormatException e) { return def; }
     }
 
     public void cleanup(String jobId) {

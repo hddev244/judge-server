@@ -64,19 +64,20 @@ public class SubmissionPersistenceService {
                 s.getId(), s.getLanguage(), s.getSourceCode(),
                 p.getId(), p.getTimeLimitMs(), p.getMemoryLimitKb(),
                 p.getCheckerType(), p.getCheckerLanguage(), p.getCheckerBinPath(),
-                "ALL",
+                p.getComparisonMode(), p.getFloatEpsilon(), p.getJudgingMode(),
                 tcs, sts);
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void saveResult(String submissionId, Long testCaseId,
-                           String verdict, int timeMs, int memoryKb) {
+                           String verdict, int timeMs, int memoryKb, double scoreRatio) {
         submissionResultRepository.save(SubmissionResult.builder()
                 .submission(submissionRepository.getReferenceById(submissionId))
                 .testCase(testCaseId != null ? testCaseRepository.getReferenceById(testCaseId) : null)
                 .status(verdict)
                 .timeMs(timeMs)
                 .memoryKb(memoryKb)
+                .scoreRatio(scoreRatio)
                 .build());
     }
 
