@@ -100,6 +100,12 @@ public class AdminProblemController {
         return ResponseEntity.ok(problemService.removeChecker(id));
     }
 
+    @PostMapping("/{id}/recompile-checker")
+    public ResponseEntity<ProblemResponse> recompileChecker(@PathVariable Long id) throws IOException {
+        requireAdmin();
+        return ResponseEntity.ok(problemService.recompileChecker(id));
+    }
+
     // ─── Subtasks ────────────────────────────────────────────────────────────
 
     @PostMapping("/{id}/subtasks")

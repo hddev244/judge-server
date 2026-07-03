@@ -347,6 +347,18 @@ public class ProblemService {
     }
 
     @Transactional
+    public ProblemResponse recompileChecker(Long problemId) throws IOException {
+        Problem problem = getOrThrow(problemId);
+        if (!"CUSTOM".equals(problem.getCheckerType()) || problem.getCheckerSource() == null) {
+            throw JudgeException.badRequest("Problem has no custom checker to recompile: " + problemId);
+        }
+        String binPath = dockerRunner.compileChecker(
+                problem.getCheckerLanguage(), problem.getCheckerSource(), problemId);
+        problem.setCheckerBinPath(binPath);
+        return ProblemResponse.from(problemRepository.save(problem));
+    }
+
+    @Transactional
     public ProblemResponse removeChecker(Long problemId) {
         Problem problem = getOrThrow(problemId);
         problem.setCheckerType("EXACT");

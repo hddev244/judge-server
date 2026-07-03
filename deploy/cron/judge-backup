@@ -1,0 +1,5 @@
+# Nightly judge-server backup — install with:
+#   sudo install -m 644 deploy/cron/judge-backup /etc/cron.d/judge-backup
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+30 2 * * * hddev244 /home/hddev244/judge-server/scripts/backup.sh >> /var/log/judge-backup.log 2>&1
