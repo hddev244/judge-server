@@ -38,7 +38,7 @@ public class DockerRunner {
         }
 
         List<String> cmd = buildDockerCmd(lang.getImage(), workDir.toString(), lang.getCompileCmd(), true);
-        ProcessResult result = runProcess(cmd, 30_000);
+        ProcessResult result = runProcess(cmd, judgeConfig.getCompileTimeoutMs());
 
         if (result.exitCode() != 0) {
             String output = result.stderr().isBlank() ? result.stdout() : result.stderr();
@@ -64,44 +64,97 @@ public class DockerRunner {
     public RunResult run(String workDir, String language, String inputPath,
                          int timeLimitMs, int memoryKb) {
         JudgeConfig.LanguageConfig lang = getLanguageConfig(language);
-        int memMb = Math.max(memoryKb / 1024, 64);
-        int cpuSecs = Math.max(timeLimitMs / 1000 + 1, 2);
+        double multiplier = lang.getTimeMultiplier() > 0 ? lang.getTimeMultiplier() : 1.0;
+        long effectiveLimitMs = Math.round(timeLimitMs * multiplier);
+
+        // Container memory cap = verdict limit + language bonus (JVM needs headroom
+        // just to start). The MLE verdict is still judged against the raw memoryKb.
+        int memMb = (int) Math.max((memoryKb + lang.getMemoryBonusKb()) / 1024, 64);
+        int cpuSecs = (int) Math.max(effectiveLimitMs / 1000 + 1, 2);
+        // Wall-clock guard is generous — it only catches hangs/sleeps, not CPU-bound TLE.
+        double wallSecs = effectiveLimitMs / 1000.0 + 1.0;
         String runCmd = lang.getRunCmd().replace("{mem}", String.valueOf(memMb));
+
+        Path metricsDir = Path.of(workDir, "metrics");
+        try {
+            Files.createDirectories(metricsDir);
+            makeWritableByAll(metricsDir);
+        } catch (IOException e) {
+            return RunResult.dockerUnavailable("cannot create metrics dir: " + e.getMessage());
+        }
+
+        long cap = judgeConfig.getOutputLimitBytes();
+        // Solution stdout goes to a file (bounded by the fsize ulimit) so the shell
+        // exit status reflects the SOLUTION's exit code — piping through `head` would
+        // mask it, and dash has no `pipefail`. GNU time writes
+        // "wall user sys maxRSS_kb exit" to /metrics/run.txt.
+        String inner = "timeout " + fmt(wallSecs)
+                + " /usr/bin/time -q -f '%e %U %S %M %x' -o /metrics/run.txt"
+                + " /bin/sh -c '" + runCmd + " < /input.txt > /metrics/out.txt 2> /metrics/err.txt'";
 
         List<String> cmd = new ArrayList<>(List.of("docker", "run", "--rm"));
         cmd.addAll(baseSandboxFlags());
         cmd.addAll(List.of(
                 "--memory", memMb + "m",
                 "--memory-swap", memMb + "m",
-                "--cpus", "0.5",
+                "--cpus", fmt(judgeConfig.getSandboxCpus()),
                 "--pids-limit", "64",
                 "--ulimit", "cpu=" + cpuSecs + ":" + cpuSecs,
                 "-v", workDir + ":/code:ro",
+                "-v", metricsDir.toString() + ":/metrics",
                 "-v", inputPath + ":/input.txt:ro",
                 "-w", "/code",
                 lang.getImage(),
-                "/bin/sh", "-c",
-                "timeout " + (timeLimitMs / 1000 + 1) + " " + runCmd + " < /input.txt"
+                "/bin/sh", "-c", inner
         ));
 
-        long start = System.currentTimeMillis();
         try {
-            ProcessResult result = runProcess(cmd, timeLimitMs + 3000L);
-            long elapsed = System.currentTimeMillis() - start;
-
-            if (result.timedOut() || result.exitCode() == 124) return RunResult.tle(elapsed);
-            if (result.exitCode() == 137) return RunResult.mle();
+            ProcessResult result = runProcess(cmd, effectiveLimitMs + 5000L);
 
             if (isDockerDaemonError(result.stderr())) {
                 log.error("Docker daemon unavailable during run, workDir={}: {}", workDir, result.stderr().trim());
                 return RunResult.dockerUnavailable(result.stderr().trim());
             }
 
+            RunMetrics m = parseMetrics(readMetricsFile(metricsDir, "run.txt"));
+
+            // Outer docker/timeout kill (hang or sleep-bound): wall-clock guard.
+            if (result.timedOut() || result.exitCode() == 124) {
+                return RunResult.tle(m != null ? m.cpuTimeMs() : effectiveLimitMs);
+            }
+
+            long memKb = m != null ? m.maxRssKb() : 0;
+            long cpuMs = m != null ? m.cpuTimeMs() : 0;
+            String outStr = readCappedFile(metricsDir.resolve("out.txt"), cap);
+            String errStr = readCappedFile(metricsDir.resolve("err.txt"), cap);
+
+            // MLE before RE: an OOM abort (exit 137, or C++ bad_alloc -> nonzero exit)
+            // is a memory problem, not a runtime error.
+            if (memoryKb > 0 && memKb >= memoryKb) {
+                return RunResult.mle(memKb);
+            }
+            if (result.exitCode() == 137) {
+                return RunResult.mle(memKb);
+            }
+            // CPU-time TLE: the honest limit check, independent of host load / spin-up.
+            if (m != null && cpuMs > effectiveLimitMs) {
+                return RunResult.builder()
+                        .timedOut(true).exitCode(124)
+                        .timeMs(cpuMs).wallTimeMs(m.wallTimeMs()).memoryKb(memKb)
+                        .stdout("").stderr("Time Limit Exceeded").build();
+            }
+
+            // Exit status from GNU time (%x) is the child's real exit code; the docker
+            // process exit reflects the `time` wrapper which is usually 0.
+            int childExit = m != null ? m.exitStatus() : result.exitCode();
+
             return RunResult.builder()
-                    .stdout(result.stdout())
-                    .stderr(result.stderr())
-                    .exitCode(result.exitCode())
-                    .timeMs(elapsed)
+                    .stdout(outStr)
+                    .stderr(errStr.isEmpty() ? result.stderr() : errStr)
+                    .exitCode(childExit)
+                    .timeMs(cpuMs)
+                    .wallTimeMs(m != null ? m.wallTimeMs() : 0)
+                    .memoryKb(memKb)
                     .build();
 
         } catch (IOException e) {
@@ -109,6 +162,54 @@ public class DockerRunner {
             return RunResult.dockerUnavailable(e.getMessage());
         }
     }
+
+    private static String fmt(double v) {
+        return java.math.BigDecimal.valueOf(v).stripTrailingZeros().toPlainString();
+    }
+
+    private String readMetricsFile(Path metricsDir, String name) {
+        try {
+            Path f = metricsDir.resolve(name);
+            return Files.exists(f) ? Files.readString(f).trim() : null;
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
+    /** Reads at most `cap` bytes of a solution's captured output file. */
+    private String readCappedFile(Path f, long cap) {
+        if (!Files.exists(f)) return "";
+        try (InputStream in = Files.newInputStream(f)) {
+            byte[] buf = new byte[(int) Math.min(cap, 8 * 1024 * 1024)];
+            int total = 0, n;
+            while (total < buf.length && (n = in.read(buf, total, buf.length - total)) != -1) {
+                total += n;
+            }
+            return new String(buf, 0, total, java.nio.charset.StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            return "";
+        }
+    }
+
+    /** Parses a GNU time line "wall user sys maxRSS_kb exit"; null if malformed. */
+    static RunMetrics parseMetrics(String line) {
+        if (line == null || line.isBlank()) return null;
+        // GNU time may prepend a "Command terminated by signal N" line on kills.
+        String last = line.lines().reduce("", (a, b) -> b).trim();
+        String[] p = last.split("\\s+");
+        if (p.length < 5) return null;
+        try {
+            long wallMs = Math.round(Double.parseDouble(p[0]) * 1000);
+            long cpuMs = Math.round((Double.parseDouble(p[1]) + Double.parseDouble(p[2])) * 1000);
+            long rssKb = Long.parseLong(p[3]);
+            int exit = Integer.parseInt(p[4]);
+            return new RunMetrics(wallMs, cpuMs, rssKb, exit);
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    record RunMetrics(long wallTimeMs, long cpuTimeMs, long maxRssKb, int exitStatus) {}
 
     /**
      * Compiles a custom checker. Returns the path to the checker binary, or throws on failure.

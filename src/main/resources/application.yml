@@ -39,22 +39,28 @@ judge:
   queue-key: ${JUDGE_QUEUE_KEY:judge:queue}
   testcase-base-path: ${JUDGE_TESTCASE_BASE_PATH:/data/problems}
   output-limit-bytes: ${JUDGE_OUTPUT_LIMIT_BYTES:1048576}
+  compile-timeout-ms: ${JUDGE_COMPILE_TIMEOUT_MS:30000}
+  sandbox-cpus: ${JUDGE_SANDBOX_CPUS:1.0}
   languages:
     cpp:
-      image: ${JUDGE_LANG_CPP_IMAGE:gcc:13}
+      image: ${JUDGE_LANG_CPP_IMAGE:judge-cpp:1}
       source-file: solution.cpp
       compile-cmd: "g++ -O2 -std=c++17 -o solution solution.cpp"
       run-cmd: "./solution"
+      time-multiplier: 1.0
     java:
-      image: ${JUDGE_LANG_JAVA_IMAGE:eclipse-temurin:21}
+      image: ${JUDGE_LANG_JAVA_IMAGE:judge-java:1}
       source-file: Solution.java
       compile-cmd: "javac -encoding UTF-8 Solution.java"
       run-cmd: "java -cp /code -Xmx{mem}m Solution"
+      time-multiplier: 2.0
+      memory-bonus-kb: 262144
     python:
-      image: ${JUDGE_LANG_PYTHON_IMAGE:python:3.12-slim}
+      image: ${JUDGE_LANG_PYTHON_IMAGE:judge-python:1}
       source-file: solution.py
       compile-cmd: ""
       run-cmd: "python3 solution.py"
+      time-multiplier: 3.0
 
 management:
   endpoints:
