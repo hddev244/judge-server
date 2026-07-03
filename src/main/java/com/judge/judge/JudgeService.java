@@ -15,7 +15,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.cache.CacheManager;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
@@ -38,6 +37,7 @@ public class JudgeService {
     private final JudgeConfig judgeConfig;
     private final JudgeStatusPublisher statusPublisher;
     private final CacheManager cacheManager;
+    private final SubmissionPersistenceService persistence;
 
     public JudgeService(SubmissionRepository submissionRepository,
                         TestCaseRepository testCaseRepository,
@@ -50,7 +50,8 @@ public class JudgeService {
                         WebhookSender webhookSender,
                         JudgeConfig judgeConfig,
                         JudgeStatusPublisher statusPublisher,
-                        CacheManager cacheManager) {
+                        CacheManager cacheManager,
+                        SubmissionPersistenceService persistence) {
         this.submissionRepository = submissionRepository;
         this.testCaseRepository = testCaseRepository;
         this.submissionResultRepository = submissionResultRepository;
@@ -63,6 +64,7 @@ public class JudgeService {
         this.judgeConfig = judgeConfig;
         this.statusPublisher = statusPublisher;
         this.cacheManager = cacheManager;
+        this.persistence = persistence;
     }
 
     private void evictLeaderboardCache() {
@@ -70,144 +72,108 @@ public class JudgeService {
         if (cache != null) cache.clear();
     }
 
-    @Transactional
+    /**
+     * Orchestrates a full judge run. NOT transactional: the minutes-long docker
+     * loop holds no DB connection. Each DB write goes through {@link #persistence}
+     * in its own short transaction, so partial results survive a crash.
+     */
     public void judge(String submissionId) {
-        Submission submission = submissionRepository.findById(submissionId).orElse(null);
-        if (submission == null) {
+        JudgeJob job;
+        try {
+            job = persistence.startJudging(submissionId);
+        } catch (ObjectOptimisticLockingFailureException e) {
+            log.warn("Submission {} already being processed (version conflict), skipping", submissionId);
+            return;
+        }
+        if (job == null) {
             log.warn("Submission not found: {}", submissionId);
             return;
         }
 
-        // Validate language
-        if (!judgeConfig.getLanguages().containsKey(submission.getLanguage())) {
-            submission.setStatus("CE");
-            submission.setErrorMessage("Unsupported language: " + submission.getLanguage());
-            submission.setFinishedAt(LocalDateTime.now());
-            submissionRepository.save(submission);
-            return;
-        }
-
-        try {
-            submission.setStatus("JUDGING");
-            submissionRepository.save(submission);
-        } catch (ObjectOptimisticLockingFailureException e) {
-            log.warn("Submission {} is already being processed by another worker (version conflict), skipping", submissionId);
+        if (!judgeConfig.getLanguages().containsKey(job.language())) {
+            Submission s = persistence.failSubmission(submissionId, "CE",
+                    "Unsupported language: " + job.language());
+            statusPublisher.publishFinal(s, List.of());
             return;
         }
 
         List<JudgeStatusPublisher.TestCaseUpdate> partialResults = new ArrayList<>();
         try {
-            Problem problem = submission.getProblem();
-            List<TestCase> testCases = testCaseRepository
-                    .findByProblemIdOrderByOrderIndexAsc(problem.getId());
-            List<Subtask> subtasks = subtaskRepository
-                    .findByProblemIdOrderByOrderIndexAsc(problem.getId());
-
-            String finalVerdict = "AC";
-            int totalScore = 0;
-            long maxTimeMs = 0;
-
             CompileResult compileResult = dockerRunner.compile(
-                    submission.getLanguage(),
-                    submission.getSourceCode(),
-                    submissionId
-            );
+                    job.language(), job.sourceCode(), submissionId);
 
             if (compileResult.isSystemError()) {
                 log.error("Docker unavailable during compile for submission {}", submissionId);
-                submission.setStatus("SE");
-                submission.setErrorMessage("Docker daemon unavailable: " + compileResult.getErrorOutput());
-                submission.setFinishedAt(LocalDateTime.now());
-                submissionRepository.save(submission);
-                statusPublisher.publishFinal(submission, List.of());
+                Submission s = persistence.failSubmission(submissionId, "SE",
+                        "Docker daemon unavailable: " + compileResult.getErrorOutput());
+                statusPublisher.publishFinal(s, List.of());
                 return;
             }
             if (!compileResult.isSuccess()) {
-                submission.setStatus("CE");
-                submission.setErrorMessage(compileResult.getErrorOutput());
-                submission.setFinishedAt(LocalDateTime.now());
-                submissionRepository.save(submission);
-                statusPublisher.publishFinal(submission, List.of());
+                Submission s = persistence.failSubmission(submissionId, "CE",
+                        compileResult.getErrorOutput());
+                statusPublisher.publishFinal(s, List.of());
                 return;
             }
 
-            // Track per-subtask pass/fail and per-case verdicts
             Map<Long, Boolean> subtaskPassed = new HashMap<>();
-            for (Subtask st : subtasks) subtaskPassed.put(st.getId(), true);
+            for (JudgeJob.SubtaskView st : job.subtasks()) subtaskPassed.put(st.id(), true);
             Map<Long, String> tcVerdicts = new LinkedHashMap<>();
 
-            for (TestCase tc : testCases) {
+            String finalVerdict = "AC";
+            long maxTimeMs = 0;
+
+            for (JudgeJob.TestCaseView tc : job.testCases()) {
                 RunResult rr = dockerRunner.run(
-                        compileResult.getWorkDir(),
-                        submission.getLanguage(),
-                        tc.getInputPath(),
-                        problem.getTimeLimitMs(),
-                        problem.getMemoryLimitKb()
-                );
+                        compileResult.getWorkDir(), job.language(),
+                        tc.inputPath(), job.timeLimitMs(), job.memoryLimitKb());
 
-                String verdict = evaluate(rr, tc, problem, compileResult.getWorkDir());
-                tcVerdicts.put(tc.getId(), verdict);
+                String verdict = evaluate(rr, tc.inputPath(), tc.outputPath(),
+                        job.checkerType(), job.checkerBinPath(), compileResult.getWorkDir());
+                tcVerdicts.put(tc.id(), verdict);
 
-                submissionResultRepository.save(SubmissionResult.builder()
-                        .submission(submission)
-                        .testCase(tc)
-                        .status(verdict)
-                        .timeMs((int) rr.getTimeMs())
-                        .memoryKb((int) rr.getMemoryKb())
-                        .build());
+                persistence.saveResult(submissionId, tc.id(), verdict,
+                        (int) rr.getTimeMs(), (int) rr.getMemoryKb());
 
                 partialResults.add(JudgeStatusPublisher.TestCaseUpdate.builder()
-                        .testCaseId(tc.getId())
-                        .status(verdict)
-                        .timeMs((int) rr.getTimeMs())
-                        .memoryKb((int) rr.getMemoryKb())
+                        .testCaseId(tc.id()).status(verdict)
+                        .timeMs((int) rr.getTimeMs()).memoryKb((int) rr.getMemoryKb())
                         .build());
                 statusPublisher.publishPartial(submissionId, partialResults);
 
                 if (!"AC".equals(verdict)) {
                     if ("AC".equals(finalVerdict)) finalVerdict = verdict;
-                    if (tc.getSubtask() != null) {
-                        subtaskPassed.put(tc.getSubtask().getId(), false);
-                    }
+                    if (tc.subtaskId() != null) subtaskPassed.put(tc.subtaskId(), false);
                 }
-
                 maxTimeMs = Math.max(maxTimeMs, rr.getTimeMs());
             }
 
-            // Score: subtask-based or per-case
-            if (!subtasks.isEmpty()) {
-                for (Subtask st : subtasks) {
-                    if (subtaskPassed.getOrDefault(st.getId(), false)) {
-                        totalScore += st.getScore();
-                    }
+            int totalScore = 0;
+            if (!job.subtasks().isEmpty()) {
+                for (JudgeJob.SubtaskView st : job.subtasks()) {
+                    if (subtaskPassed.getOrDefault(st.id(), false)) totalScore += st.score();
                 }
-                for (TestCase tc : testCases) {
-                    if (tc.getSubtask() == null && "AC".equals(tcVerdicts.get(tc.getId()))) {
-                        totalScore += tc.getScore();
-                    }
+                for (JudgeJob.TestCaseView tc : job.testCases()) {
+                    if (tc.subtaskId() == null && "AC".equals(tcVerdicts.get(tc.id())))
+                        totalScore += tc.score();
                 }
             } else {
-                for (TestCase tc : testCases) {
-                    if ("AC".equals(tcVerdicts.get(tc.getId()))) totalScore += tc.getScore();
+                for (JudgeJob.TestCaseView tc : job.testCases()) {
+                    if ("AC".equals(tcVerdicts.get(tc.id()))) totalScore += tc.score();
                 }
             }
 
-            submission.setStatus(testCases.isEmpty() ? "AC" : finalVerdict);
-            submission.setScore(totalScore);
-            submission.setTimeMs((int) maxTimeMs);
-            submission.setFinishedAt(LocalDateTime.now());
-            submissionRepository.save(submission);
-            statusPublisher.publishFinal(submission, partialResults);
-            webhookSender.sendAsync(submission);
-            if (submission.getUserRef() != null) evictLeaderboardCache();
+            String status = job.testCases().isEmpty() ? "AC" : finalVerdict;
+            Submission s = persistence.finalizeSubmission(submissionId, status, totalScore, (int) maxTimeMs);
+            statusPublisher.publishFinal(s, partialResults);
+            webhookSender.sendAsync(s);
+            if (s.getUserRef() != null) evictLeaderboardCache();
 
         } catch (IOException e) {
             log.error("Judge error for submission {}", submissionId, e);
-            submission.setStatus("SE");
-            submission.setErrorMessage("Internal judge error: " + e.getMessage());
-            submission.setFinishedAt(LocalDateTime.now());
-            submissionRepository.save(submission);
-            statusPublisher.publishFinal(submission, List.of());
+            Submission s = persistence.failSubmission(submissionId, "SE",
+                    "Internal judge error: " + e.getMessage());
+            statusPublisher.publishFinal(s, List.of());
         } finally {
             dockerRunner.cleanup(submissionId);
         }
@@ -252,7 +218,8 @@ public class JudgeService {
                 RunResult rr = dockerRunner.run(
                         cr.getWorkDir(), req.getLanguage(),
                         tc.getInputPath(), problem.getTimeLimitMs(), problem.getMemoryLimitKb());
-                String verdict = evaluate(rr, tc, problem, cr.getWorkDir());
+                String verdict = evaluate(rr, tc.getInputPath(), tc.getOutputPath(),
+                        problem.getCheckerType(), problem.getCheckerBinPath(), cr.getWorkDir());
                 results.add(SubmissionResponse.TestResultDto.builder()
                         .testCaseId(tc.getId()).status(verdict)
                         .timeMs((int) rr.getTimeMs()).memoryKb((int) rr.getMemoryKb())
@@ -277,27 +244,23 @@ public class JudgeService {
         }
     }
 
-    private String evaluate(RunResult rr, TestCase tc, Problem problem, String workDir) {
+    private String evaluate(RunResult rr, String inputPath, String expectedPath,
+                            String checkerType, String checkerBinPath, String workDir) {
         if (rr.isSystemError())    return "SE";
         if (rr.isTimedOut())       return "TLE";
         if (rr.isMemoryExceeded()) return "MLE";
         if (rr.getExitCode() != 0) return "RE";
 
-        if ("CUSTOM".equals(problem.getCheckerType()) && problem.getCheckerBinPath() != null) {
+        if ("CUSTOM".equals(checkerType) && checkerBinPath != null) {
             try {
                 return dockerRunner.runChecker(
-                        problem.getCheckerBinPath(),
-                        tc.getInputPath(),
-                        tc.getOutputPath(),
-                        rr.getStdout(),
-                        workDir
-                );
+                        checkerBinPath, inputPath, expectedPath, rr.getStdout(), workDir);
             } catch (IOException e) {
-                log.error("Checker error for tc={}", tc.getId(), e);
+                log.error("Checker error for input={}", inputPath, e);
                 return "SE";
             }
         }
 
-        return comparator.compare(rr.getStdout(), tc.getOutputPath()) ? "AC" : "WA";
+        return comparator.compare(rr.getStdout(), expectedPath) ? "AC" : "WA";
     }
 }

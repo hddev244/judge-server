@@ -401,12 +401,22 @@ public class DockerRunner {
         }
     }
 
+    /**
+     * Distinguishes infrastructure failure (daemon down, CLI missing) from a
+     * user program's own stderr. Anchors to the docker CLI's own message lines
+     * so a program printing "executable file not found" can't be misread as SE.
+     */
     static boolean isDockerDaemonError(String text) {
         if (text == null || text.isBlank()) return false;
-        return text.contains("Cannot connect to the Docker daemon")
-                || text.contains("Is the docker daemon running")
-                || text.contains("docker: not found")
-                || text.contains("executable file not found");
+        return text.lines().anyMatch(line -> {
+            String l = line.trim();
+            return l.startsWith("Cannot connect to the Docker daemon")
+                    || l.startsWith("docker: Cannot connect")
+                    || l.contains("Is the docker daemon running")
+                    || l.startsWith("docker: not found")
+                    || l.startsWith("docker: command not found")
+                    || l.startsWith("error during connect");
+        });
     }
 
     private record ProcessResult(String stdout, String stderr, int exitCode, boolean timedOut) {}

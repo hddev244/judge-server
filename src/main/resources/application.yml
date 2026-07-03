@@ -41,6 +41,7 @@ judge:
   output-limit-bytes: ${JUDGE_OUTPUT_LIMIT_BYTES:1048576}
   compile-timeout-ms: ${JUDGE_COMPILE_TIMEOUT_MS:30000}
   sandbox-cpus: ${JUDGE_SANDBOX_CPUS:1.0}
+  stuck-timeout-minutes: ${JUDGE_STUCK_TIMEOUT_MINUTES:15}
   languages:
     cpp:
       image: ${JUDGE_LANG_CPP_IMAGE:judge-cpp:1}

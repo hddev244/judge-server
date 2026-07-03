@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.judge.repository.ApiKeyRepository;
 import com.judge.security.ApiKeyFilter;
 import com.judge.security.RateLimitFilter;
+import io.github.bucket4j.distributed.proxy.ProxyManager;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -20,6 +21,7 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http,
                                            ApiKeyRepository apiKeyRepository,
+                                           ProxyManager<byte[]> rateLimitProxyManager,
                                            ObjectMapper objectMapper) throws Exception {
         return http
                 .csrf(AbstractHttpConfigurer::disable)
@@ -27,7 +29,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth.anyRequest().permitAll())
                 .addFilterBefore(new ApiKeyFilter(apiKeyRepository, objectMapper),
                         UsernamePasswordAuthenticationFilter.class)
-                .addFilterAfter(new RateLimitFilter(objectMapper), ApiKeyFilter.class)
+                .addFilterAfter(new RateLimitFilter(rateLimitProxyManager, objectMapper), ApiKeyFilter.class)
                 .build();
     }
 }

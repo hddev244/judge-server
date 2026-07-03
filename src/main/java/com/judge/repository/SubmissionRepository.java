@@ -14,6 +14,9 @@ public interface SubmissionRepository extends JpaRepository<Submission, String> 
 
     List<Submission> findByContestIdAndIsTestRunFalse(Long contestId);
 
+    @Query("SELECT s.id FROM Submission s WHERE s.status = 'JUDGING' AND s.createdAt < :threshold")
+    List<String> findStuckJudgingIds(@Param("threshold") java.time.LocalDateTime threshold);
+
     @Query(value = """
             SELECT
               user_ref,
