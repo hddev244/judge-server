@@ -127,52 +127,90 @@ public class JudgeService {
             long maxTimeMs = 0;
             String mode = job.judgingMode() != null ? job.judgingMode() : "ALL";
 
-            for (JudgeJob.TestCaseView tc : job.testCases()) {
-                // Early-exit: skip remaining cases of an already-failed subtask, or all
-                // remaining cases once any case failed (STOP_ON_FIRST_FAIL).
-                boolean skip = ("SUBTASK_SKIP".equals(mode) && tc.subtaskId() != null
-                                && failedSubtasks.contains(tc.subtaskId()))
-                            || ("STOP_ON_FIRST_FAIL".equals(mode) && !"AC".equals(finalVerdict));
-                if (skip) {
-                    persistence.saveResult(submissionId, tc.id(), "SKIPPED", 0, 0, 0.0);
-                    caseRatios.put(tc.id(), 0.0);
-                    continue;
-                }
+            if ("INTERACTIVE".equals(job.checkerType()) && job.checkerBinPath() != null) {
+                for (JudgeJob.TestCaseView tc : job.testCases()) {
+                    boolean skip = ("SUBTASK_SKIP".equals(mode) && tc.subtaskId() != null
+                                    && failedSubtasks.contains(tc.subtaskId()))
+                                || ("STOP_ON_FIRST_FAIL".equals(mode) && !"AC".equals(finalVerdict));
+                    if (skip) {
+                        persistence.saveResult(submissionId, tc.id(), "SKIPPED", 0, 0, 0.0);
+                        caseRatios.put(tc.id(), 0.0);
+                        continue;
+                    }
 
-                CaseOutcome oc;
-                int caseTimeMs, caseMemKb;
-                if ("INTERACTIVE".equals(job.checkerType()) && job.checkerBinPath() != null) {
                     var ir = dockerRunner.runInteractive(
                             compileResult.getWorkDir(), job.language(),
                             job.checkerBinPath(), job.checkerLanguage(),
                             tc.inputPath(), tc.outputPath(), job.timeLimitMs(), job.memoryLimitKb());
-                    oc = new CaseOutcome(ir.verdict(), ir.ratio());
-                    caseTimeMs = (int) ir.timeMs();
-                    caseMemKb = (int) ir.memoryKb();
-                } else {
-                    RunResult rr = dockerRunner.run(
-                            compileResult.getWorkDir(), job.language(),
-                            tc.inputPath(), job.timeLimitMs(), job.memoryLimitKb());
-                    oc = evaluate(rr, tc.inputPath(), tc.outputPath(), job, compileResult.getWorkDir());
-                    caseTimeMs = (int) rr.getTimeMs();
-                    caseMemKb = (int) rr.getMemoryKb();
+                    CaseOutcome oc = new CaseOutcome(ir.verdict(), ir.ratio());
+                    int caseTimeMs = (int) ir.timeMs();
+                    int caseMemKb = (int) ir.memoryKb();
+
+                    persistence.saveResult(submissionId, tc.id(), oc.verdict(),
+                            caseTimeMs, caseMemKb, oc.ratio(), null, null);
+
+                    partialResults.add(JudgeStatusPublisher.TestCaseUpdate.builder()
+                            .testCaseId(tc.id()).status(oc.verdict())
+                            .timeMs(caseTimeMs).memoryKb(caseMemKb)
+                            .build());
+                    statusPublisher.publishPartial(submissionId, partialResults);
+
+                    caseRatios.put(tc.id(), oc.ratio());
+                    if (!"AC".equals(oc.verdict())) {
+                        if ("AC".equals(finalVerdict)) finalVerdict = oc.verdict();
+                        if (tc.subtaskId() != null) failedSubtasks.add(tc.subtaskId());
+                    }
+                    maxTimeMs = Math.max(maxTimeMs, caseTimeMs);
                 }
+            } else {
+                boolean stopOnFail = "STOP_ON_FIRST_FAIL".equals(mode);
+                List<DockerRunner.BatchTestCase> batchCases = job.testCases().stream()
+                        .map(tc -> new DockerRunner.BatchTestCase(tc.id(), tc.inputPath()))
+                        .toList();
 
-                persistence.saveResult(submissionId, tc.id(), oc.verdict(),
-                        caseTimeMs, caseMemKb, oc.ratio());
+                Map<Long, RunResult> runResults = dockerRunner.runBatch(
+                        compileResult.getWorkDir(), job.language(),
+                        batchCases, job.timeLimitMs(), job.memoryLimitKb(), stopOnFail);
 
-                partialResults.add(JudgeStatusPublisher.TestCaseUpdate.builder()
-                        .testCaseId(tc.id()).status(oc.verdict())
-                        .timeMs(caseTimeMs).memoryKb(caseMemKb)
-                        .build());
+                for (JudgeJob.TestCaseView tc : job.testCases()) {
+                    boolean skip = ("SUBTASK_SKIP".equals(mode) && tc.subtaskId() != null
+                                    && failedSubtasks.contains(tc.subtaskId()))
+                                || ("STOP_ON_FIRST_FAIL".equals(mode) && !"AC".equals(finalVerdict));
+                    if (skip) {
+                        persistence.saveResult(submissionId, tc.id(), "SKIPPED", 0, 0, 0.0);
+                        caseRatios.put(tc.id(), 0.0);
+                        continue;
+                    }
+
+                    RunResult rr = runResults.get(tc.id());
+                    if (rr == null) {
+                        persistence.saveResult(submissionId, tc.id(), "SKIPPED", 0, 0, 0.0);
+                        caseRatios.put(tc.id(), 0.0);
+                        continue;
+                    }
+
+                    CaseOutcome oc = evaluate(rr, tc.inputPath(), tc.outputPath(), job, compileResult.getWorkDir());
+                    int caseTimeMs = (int) rr.getTimeMs();
+                    int caseMemKb = (int) rr.getMemoryKb();
+                    String stdout = rr.getStdout();
+                    String stderr = rr.getStderr();
+
+                    persistence.saveResult(submissionId, tc.id(), oc.verdict(),
+                            caseTimeMs, caseMemKb, oc.ratio(), stdout, stderr);
+
+                    partialResults.add(JudgeStatusPublisher.TestCaseUpdate.builder()
+                            .testCaseId(tc.id()).status(oc.verdict())
+                            .timeMs(caseTimeMs).memoryKb(caseMemKb)
+                            .build());
+
+                    caseRatios.put(tc.id(), oc.ratio());
+                    if (!"AC".equals(oc.verdict())) {
+                        if ("AC".equals(finalVerdict)) finalVerdict = oc.verdict();
+                        if (tc.subtaskId() != null) failedSubtasks.add(tc.subtaskId());
+                    }
+                    maxTimeMs = Math.max(maxTimeMs, caseTimeMs);
+                }
                 statusPublisher.publishPartial(submissionId, partialResults);
-
-                caseRatios.put(tc.id(), oc.ratio());
-                if (!"AC".equals(oc.verdict())) {
-                    if ("AC".equals(finalVerdict)) finalVerdict = oc.verdict();
-                    if (tc.subtaskId() != null) failedSubtasks.add(tc.subtaskId());
-                }
-                maxTimeMs = Math.max(maxTimeMs, caseTimeMs);
             }
 
             int totalScore = scoringService.total(job.subtasks(), job.testCases(), caseRatios);
@@ -223,44 +261,85 @@ public class JudgeService {
                         .language(req.getLanguage()).testResults(List.of()).build();
             }
 
+            if (req.getInput() != null && !req.getInput().isBlank()) {
+                java.nio.file.Path in = java.nio.file.Path.of(cr.getWorkDir(), "custom.in");
+                java.nio.file.Files.writeString(in, req.getInput());
+                RunResult rr = dockerRunner.run(
+                        cr.getWorkDir(), req.getLanguage(), in.toString(),
+                        problem.getTimeLimitMs(), problem.getMemoryLimitKb());
+                String status = runStatus(rr);
+                return SubmissionResponse.builder()
+                        .status(status).score(0)
+                        .timeMs((int) rr.getTimeMs())
+                        .memoryKb((int) rr.getMemoryKb())
+                        .stdout(rr.getStdout())
+                        .stderr(rr.getStderr())
+                        .testRun(true).language(req.getLanguage())
+                        .testResults(List.of()).build();
+            }
+
             List<SubmissionResponse.TestResultDto> results = new ArrayList<>();
             String finalVerdict = "AC";
             int totalScore = 0;
             long maxTimeMs = 0;
 
-            for (TestCase tc : samples) {
-                CaseOutcome oc;
-                int caseTimeMs, caseMemKb;
-                if ("INTERACTIVE".equals(problem.getCheckerType()) && problem.getCheckerBinPath() != null) {
+            if ("INTERACTIVE".equals(problem.getCheckerType()) && problem.getCheckerBinPath() != null) {
+                for (TestCase tc : samples) {
                     var ir = dockerRunner.runInteractive(
                             cr.getWorkDir(), req.getLanguage(),
                             problem.getCheckerBinPath(), problem.getCheckerLanguage(),
                             tc.getInputPath(), tc.getOutputPath(),
                             problem.getTimeLimitMs(), problem.getMemoryLimitKb());
-                    oc = new CaseOutcome(ir.verdict(), ir.ratio());
-                    caseTimeMs = (int) ir.timeMs();
-                    caseMemKb = (int) ir.memoryKb();
-                } else {
-                    RunResult rr = dockerRunner.run(
-                            cr.getWorkDir(), req.getLanguage(),
-                            tc.getInputPath(), problem.getTimeLimitMs(), problem.getMemoryLimitKb());
-                    oc = evaluate(rr, tc.getInputPath(), tc.getOutputPath(),
-                            problem.getCheckerType(), problem.getCheckerLanguage(), problem.getCheckerBinPath(),
-                            problem.getComparisonMode(), problem.getFloatEpsilon(), cr.getWorkDir());
-                    caseTimeMs = (int) rr.getTimeMs();
-                    caseMemKb = (int) rr.getMemoryKb();
+                    CaseOutcome oc = new CaseOutcome(ir.verdict(), ir.ratio());
+                    int caseTimeMs = (int) ir.timeMs();
+                    int caseMemKb = (int) ir.memoryKb();
+                    results.add(SubmissionResponse.TestResultDto.builder()
+                            .testCaseId(tc.getId()).status(oc.verdict())
+                            .timeMs(caseTimeMs).memoryKb(caseMemKb)
+                            .build());
+                    totalScore += (int) Math.round(tc.getScore() * oc.ratio());
+                    if (!"AC".equals(oc.verdict()) && "AC".equals(finalVerdict)) finalVerdict = oc.verdict();
+                    maxTimeMs = Math.max(maxTimeMs, caseTimeMs);
                 }
-                results.add(SubmissionResponse.TestResultDto.builder()
-                        .testCaseId(tc.getId()).status(oc.verdict())
-                        .timeMs(caseTimeMs).memoryKb(caseMemKb)
-                        .build());
-                totalScore += (int) Math.round(tc.getScore() * oc.ratio());
-                if (!"AC".equals(oc.verdict()) && "AC".equals(finalVerdict)) finalVerdict = oc.verdict();
-                maxTimeMs = Math.max(maxTimeMs, caseTimeMs);
+            } else {
+                List<DockerRunner.BatchTestCase> batchCases = samples.stream()
+                        .map(tc -> new DockerRunner.BatchTestCase(tc.getId(), tc.getInputPath()))
+                        .toList();
+                Map<Long, RunResult> runResults = dockerRunner.runBatch(
+                        cr.getWorkDir(), req.getLanguage(), batchCases,
+                        problem.getTimeLimitMs(), problem.getMemoryLimitKb(), false);
+
+                for (TestCase tc : samples) {
+                    RunResult rr = runResults.get(tc.getId());
+                    CaseOutcome oc;
+                    int caseTimeMs = 0, caseMemKb = 0;
+                    String stdout = null, stderr = null;
+                    if (rr != null) {
+                        oc = evaluate(rr, tc.getInputPath(), tc.getOutputPath(),
+                                problem.getCheckerType(), problem.getCheckerLanguage(), problem.getCheckerBinPath(),
+                                problem.getComparisonMode(), problem.getFloatEpsilon(), cr.getWorkDir());
+                        caseTimeMs = (int) rr.getTimeMs();
+                        caseMemKb = (int) rr.getMemoryKb();
+                        stdout = rr.getStdout();
+                        stderr = rr.getStderr();
+                    } else {
+                        oc = CaseOutcome.of("SE");
+                    }
+                    results.add(SubmissionResponse.TestResultDto.builder()
+                            .testCaseId(tc.getId()).status(oc.verdict())
+                            .timeMs(caseTimeMs).memoryKb(caseMemKb)
+                            .stdout(stdout).stderr(stderr)
+                            .build());
+                    totalScore += (int) Math.round(tc.getScore() * oc.ratio());
+                    if (!"AC".equals(oc.verdict()) && "AC".equals(finalVerdict)) finalVerdict = oc.verdict();
+                    maxTimeMs = Math.max(maxTimeMs, caseTimeMs);
+                }
             }
 
+            String firstOut = results.isEmpty() ? null : results.get(0).getStdout();
             return SubmissionResponse.builder()
                     .status(finalVerdict).score(totalScore).timeMs((int) maxTimeMs)
+                    .stdout(firstOut)
                     .testRun(true).language(req.getLanguage()).testResults(results).build();
 
         } catch (IOException e) {
@@ -278,6 +357,14 @@ public class JudgeService {
     public record CaseOutcome(String verdict, double ratio) {
         static CaseOutcome ac()          { return new CaseOutcome("AC", 1.0); }
         static CaseOutcome of(String v)  { return new CaseOutcome(v, "AC".equals(v) ? 1.0 : 0.0); }
+    }
+
+    private static String runStatus(RunResult rr) {
+        if (rr.isSystemError())    return "SE";
+        if (rr.isTimedOut())       return "TLE";
+        if (rr.isMemoryExceeded()) return "MLE";
+        if (rr.getExitCode() != 0) return "RE";
+        return "AC";
     }
 
     private CaseOutcome evaluate(RunResult rr, String inputPath, String expectedPath,

@@ -35,4 +35,12 @@ public class SubmissionResult {
     /** Fraction of the case score awarded (0..1). NULL treated as 1.0 for AC. */
     @Column(name = "score_ratio")
     private Double scoreRatio;
+
+    /** Truncated program stdout (see SubmissionPersistenceService.STDOUT_CAP). */
+    @Column(columnDefinition = "TEXT")
+    private String stdout;
+
+    /** Truncated program stderr (RE / diagnostics). */
+    @Column(columnDefinition = "TEXT")
+    private String stderr;
 }

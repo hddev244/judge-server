@@ -1,15 +1,17 @@
 package com.judge.judge;
 
+import com.judge.config.JudgeConfig;
 import com.judge.queue.JudgeQueueService;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 
 import java.util.Optional;
+import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -22,6 +24,9 @@ public class JudgeWorker {
 
     private final JudgeQueueService queueService;
     private final JudgeService judgeService;
+    private final JudgeConfig judgeConfig;
+    private final Executor judgeExecutor;
+
     // Shared daemon that renews all in-flight locks so a long judge run never
     // loses its lock to TTL expiry.
     private final ScheduledExecutorService renewer =
@@ -31,22 +36,35 @@ public class JudgeWorker {
                 return t;
             });
 
-    public JudgeWorker(JudgeQueueService queueService, JudgeService judgeService) {
+    public JudgeWorker(JudgeQueueService queueService,
+                       JudgeService judgeService,
+                       JudgeConfig judgeConfig,
+                       @Qualifier("judgeExecutor") Executor judgeExecutor) {
         this.queueService = queueService;
         this.judgeService = judgeService;
+        this.judgeConfig = judgeConfig;
+        this.judgeExecutor = judgeExecutor;
     }
 
-    @Async("judgeExecutor")
     @EventListener(ApplicationReadyEvent.class)
-    public void startWorker() {
-        log.info("Judge worker started on thread: {}", Thread.currentThread().getName());
+    public void startWorkers() {
+        int workers = Math.max(judgeConfig.getWorkers(), 1);
+        log.info("Starting {} judge worker loop(s)...", workers);
+        for (int i = 1; i <= workers; i++) {
+            final int workerId = i;
+            judgeExecutor.execute(() -> runWorkerLoop(workerId));
+        }
+    }
+
+    private void runWorkerLoop(int workerId) {
+        log.info("Judge worker #{} started on thread: {}", workerId, Thread.currentThread().getName());
         while (!Thread.currentThread().isInterrupted()) {
             try {
                 processOne();
             } catch (Throwable t) {
                 // Never let the loop die: an escaped error would silently retire
                 // this worker slot until the whole app restarts.
-                log.error("Worker loop error, backing off", t);
+                log.error("Worker #{} loop error, backing off", workerId, t);
                 sleep(2000);
             }
         }

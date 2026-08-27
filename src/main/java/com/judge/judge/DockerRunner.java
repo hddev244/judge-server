@@ -11,9 +11,7 @@ import org.springframework.stereotype.Component;
 
 import java.io.*;
 import java.nio.file.*;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 @Component
@@ -63,17 +61,29 @@ public class DockerRunner {
         return CompileResult.builder().success(true).workDir(workDir.toString()).build();
     }
 
+    public record BatchTestCase(Long id, String inputPath) {}
+
     public RunResult run(String workDir, String language, String inputPath,
                          int timeLimitMs, int memoryKb) {
+        Map<Long, RunResult> map = runBatch(workDir, language,
+                List.of(new BatchTestCase(1L, inputPath)),
+                timeLimitMs, memoryKb, false);
+        return map.getOrDefault(1L, RunResult.dockerUnavailable("no result returned"));
+    }
+
+    public Map<Long, RunResult> runBatch(String workDir, String language,
+                                         List<BatchTestCase> testCases,
+                                         int timeLimitMs, int memoryKb,
+                                         boolean stopOnFail) {
+        if (testCases == null || testCases.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
         JudgeConfig.LanguageConfig lang = getLanguageConfig(language);
         double multiplier = lang.getTimeMultiplier() > 0 ? lang.getTimeMultiplier() : 1.0;
         long effectiveLimitMs = Math.round(timeLimitMs * multiplier);
 
-        // Container memory cap = verdict limit + language bonus (JVM needs headroom
-        // just to start). The MLE verdict is still judged against the raw memoryKb.
         int memMb = (int) Math.max((memoryKb + lang.getMemoryBonusKb()) / 1024, 64);
-        int cpuSecs = (int) Math.max(effectiveLimitMs / 1000 + 1, 2);
-        // Wall-clock guard is generous — it only catches hangs/sleeps, not CPU-bound TLE.
         double wallSecs = effectiveLimitMs / 1000.0 + 1.0;
         String runCmd = lang.getRunCmd().replace("{mem}", String.valueOf(memMb));
 
@@ -82,17 +92,42 @@ public class DockerRunner {
             Files.createDirectories(metricsDir);
             makeWritableByAll(metricsDir);
         } catch (IOException e) {
-            return RunResult.dockerUnavailable("cannot create metrics dir: " + e.getMessage());
+            log.error("Cannot create metrics dir: {}", metricsDir, e);
+            Map<Long, RunResult> errMap = new HashMap<>();
+            for (BatchTestCase tc : testCases) {
+                errMap.put(tc.id(), RunResult.dockerUnavailable("cannot create metrics dir: " + e.getMessage()));
+            }
+            return errMap;
         }
 
-        long cap = judgeConfig.getOutputLimitBytes();
-        // Solution stdout goes to a file (bounded by the fsize ulimit) so the shell
-        // exit status reflects the SOLUTION's exit code — piping through `head` would
-        // mask it, and dash has no `pipefail`. GNU time writes
-        // "wall user sys maxRSS_kb exit" to /metrics/run.txt.
-        String inner = "timeout " + fmt(wallSecs)
-                + " /usr/bin/time -q -f '%e %U %S %M %x' -o /metrics/run.txt"
-                + " /bin/sh -c '" + runCmd + " < /input.txt > /metrics/out.txt 2> /metrics/err.txt'";
+        // Generate batch_run.sh
+        StringBuilder script = new StringBuilder();
+        script.append("#!/bin/sh\nset +e\n");
+        for (BatchTestCase tc : testCases) {
+            String containerInput = resolveContainerPath(tc.inputPath(), workDir);
+            script.append(String.format(
+                    "/usr/bin/time -q -f '%%e %%U %%S %%M %%x' -o /metrics/%d.time timeout %s /bin/sh -c '%s < \"%s\" > /metrics/%d.out 2> /metrics/%d.err'\n" +
+                    "EC=$?\n" +
+                    "echo $EC > /metrics/%d.exit\n",
+                    tc.id(), fmt(wallSecs), runCmd, containerInput, tc.id(), tc.id(), tc.id()
+            ));
+            if (stopOnFail) {
+                script.append("if [ \"$EC\" -ne 0 ]; then exit 0; fi\n");
+            }
+        }
+
+        Path scriptPath = Path.of(workDir, "batch_run.sh");
+        try {
+            Files.writeString(scriptPath, script.toString());
+            makeWritableByAll(scriptPath);
+        } catch (IOException e) {
+            log.error("Failed to write batch script: {}", scriptPath, e);
+            Map<Long, RunResult> errMap = new HashMap<>();
+            for (BatchTestCase tc : testCases) {
+                errMap.put(tc.id(), RunResult.dockerUnavailable("cannot write batch script: " + e.getMessage()));
+            }
+            return errMap;
+        }
 
         List<String> cmd = new ArrayList<>(List.of("docker", "run", "--rm"));
         cmd.addAll(baseSandboxFlags());
@@ -101,68 +136,93 @@ public class DockerRunner {
                 "--memory-swap", memMb + "m",
                 "--cpus", fmt(judgeConfig.getSandboxCpus()),
                 "--pids-limit", "64",
-                "--ulimit", "cpu=" + cpuSecs + ":" + cpuSecs,
                 "-v", workDir + ":/code:ro",
                 "-v", metricsDir.toString() + ":/metrics",
-                "-v", inputPath + ":/input.txt:ro",
+                "-v", judgeConfig.getTestcaseBasePath() + ":" + judgeConfig.getTestcaseBasePath() + ":ro",
                 "-w", "/code",
                 lang.getImage(),
-                "/bin/sh", "-c", inner
+                "/bin/sh", "/code/batch_run.sh"
         ));
 
+        long cap = judgeConfig.getOutputLimitBytes();
+        long totalTimeoutMs = Math.max(testCases.size() * (effectiveLimitMs + 1500L) + 5000L, 30000L);
+
+        Map<Long, RunResult> results = new HashMap<>();
         try {
-            ProcessResult result = runProcess(cmd, effectiveLimitMs + 5000L);
+            ProcessResult result = runProcess(cmd, totalTimeoutMs);
 
             if (isDockerDaemonError(result.stderr())) {
-                log.error("Docker daemon unavailable during run, workDir={}: {}", workDir, result.stderr().trim());
-                return RunResult.dockerUnavailable(result.stderr().trim());
+                log.error("Docker daemon unavailable during batch run, workDir={}: {}", workDir, result.stderr().trim());
+                for (BatchTestCase tc : testCases) {
+                    results.put(tc.id(), RunResult.dockerUnavailable(result.stderr().trim()));
+                }
+                return results;
             }
 
-            RunMetrics m = parseMetrics(readMetricsFile(metricsDir, "run.txt"));
+            for (BatchTestCase tc : testCases) {
+                Path timeFile = metricsDir.resolve(tc.id() + ".time");
+                Path exitFile = metricsDir.resolve(tc.id() + ".exit");
+                if (!Files.exists(timeFile) && !Files.exists(exitFile)) {
+                    // Not executed (e.g. stopped early due to stopOnFail)
+                    continue;
+                }
 
-            // Outer docker/timeout kill (hang or sleep-bound): wall-clock guard.
-            if (result.timedOut() || result.exitCode() == 124) {
-                return RunResult.tle(m != null ? m.cpuTimeMs() : effectiveLimitMs);
+                RunMetrics m = parseMetrics(readMetricsFile(metricsDir, tc.id() + ".time"));
+                int rawExit = parseIntSafe(readMetricsFile(metricsDir, tc.id() + ".exit"), m != null ? m.exitStatus() : -1);
+
+                if (result.timedOut() || rawExit == 124) {
+                    results.put(tc.id(), RunResult.tle(m != null ? m.cpuTimeMs() : effectiveLimitMs));
+                    continue;
+                }
+
+                long memKb = m != null ? m.maxRssKb() : 0;
+                long cpuMs = m != null ? m.cpuTimeMs() : 0;
+                String outStr = readCappedFile(metricsDir.resolve(tc.id() + ".out"), cap);
+                String errStr = readCappedFile(metricsDir.resolve(tc.id() + ".err"), cap);
+
+                if (memoryKb > 0 && memKb >= memoryKb) {
+                    results.put(tc.id(), RunResult.mle(memKb));
+                    continue;
+                }
+                if (rawExit == 137) {
+                    results.put(tc.id(), RunResult.mle(memKb));
+                    continue;
+                }
+                if (m != null && cpuMs > effectiveLimitMs) {
+                    results.put(tc.id(), RunResult.builder()
+                            .timedOut(true).exitCode(124)
+                            .timeMs(cpuMs).wallTimeMs(m.wallTimeMs()).memoryKb(memKb)
+                            .stdout("").stderr("Time Limit Exceeded").build());
+                    continue;
+                }
+
+                int childExit = m != null ? m.exitStatus() : rawExit;
+                results.put(tc.id(), RunResult.builder()
+                        .stdout(outStr)
+                        .stderr(errStr.isEmpty() ? (childExit != 0 ? "Process exited with code " + childExit : "") : errStr)
+                        .exitCode(childExit)
+                        .timeMs(cpuMs)
+                        .wallTimeMs(m != null ? m.wallTimeMs() : 0)
+                        .memoryKb(memKb)
+                        .build());
             }
-
-            long memKb = m != null ? m.maxRssKb() : 0;
-            long cpuMs = m != null ? m.cpuTimeMs() : 0;
-            String outStr = readCappedFile(metricsDir.resolve("out.txt"), cap);
-            String errStr = readCappedFile(metricsDir.resolve("err.txt"), cap);
-
-            // MLE before RE: an OOM abort (exit 137, or C++ bad_alloc -> nonzero exit)
-            // is a memory problem, not a runtime error.
-            if (memoryKb > 0 && memKb >= memoryKb) {
-                return RunResult.mle(memKb);
-            }
-            if (result.exitCode() == 137) {
-                return RunResult.mle(memKb);
-            }
-            // CPU-time TLE: the honest limit check, independent of host load / spin-up.
-            if (m != null && cpuMs > effectiveLimitMs) {
-                return RunResult.builder()
-                        .timedOut(true).exitCode(124)
-                        .timeMs(cpuMs).wallTimeMs(m.wallTimeMs()).memoryKb(memKb)
-                        .stdout("").stderr("Time Limit Exceeded").build();
-            }
-
-            // Exit status from GNU time (%x) is the child's real exit code; the docker
-            // process exit reflects the `time` wrapper which is usually 0.
-            int childExit = m != null ? m.exitStatus() : result.exitCode();
-
-            return RunResult.builder()
-                    .stdout(outStr)
-                    .stderr(errStr.isEmpty() ? result.stderr() : errStr)
-                    .exitCode(childExit)
-                    .timeMs(cpuMs)
-                    .wallTimeMs(m != null ? m.wallTimeMs() : 0)
-                    .memoryKb(memKb)
-                    .build();
 
         } catch (IOException e) {
-            log.error("Docker run failed (binary unavailable?), workDir={}", workDir, e);
-            return RunResult.dockerUnavailable(e.getMessage());
+            log.error("Docker batch run failed, workDir={}", workDir, e);
+            for (BatchTestCase tc : testCases) {
+                results.put(tc.id(), RunResult.dockerUnavailable(e.getMessage()));
+            }
         }
+
+        return results;
+    }
+
+    static String resolveContainerPath(String hostPath, String workDir) {
+        if (hostPath == null) return "";
+        if (hostPath.startsWith(workDir)) {
+            return "/code" + hostPath.substring(workDir.length());
+        }
+        return hostPath;
     }
 
     private static String fmt(double v) {

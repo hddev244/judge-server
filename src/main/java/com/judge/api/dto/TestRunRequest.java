@@ -14,4 +14,10 @@ public class TestRunRequest {
 
     @NotBlank
     private String sourceCode;
+
+    /**
+     * Optional stdin for a one-shot run (no expected-output compare).
+     * When blank, the test endpoint runs the problem's sample cases instead.
+     */
+    private String input;
 }

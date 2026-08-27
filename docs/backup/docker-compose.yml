@@ -1,0 +1,66 @@
+services:
+  judge-api:
+    build: .
+    ports:
+      - "${SERVER_PORT:-8080}:8433"
+    env_file:
+      - .env
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      # Docker API goes through the socket proxy — the raw host socket is
+      # root-equivalent and must never be mounted into this container.
+      - DOCKER_HOST=tcp://docker-proxy:2375
+    volumes:
+      - ${JUDGE_WORK_BASE:-/tmp/judge}:${JUDGE_WORK_BASE:-/tmp/judge}
+      - ${JUDGE_TESTCASE_BASE_PATH:-/data/problems}:${JUDGE_TESTCASE_BASE_PATH:-/data/problems}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      docker-proxy:
+        condition: service_started
+    restart: unless-stopped
+
+  # Restricted gateway to the Docker daemon: only the endpoints `docker run --rm`
+  # needs (create/start/attach/wait + info). EXEC/BUILD/VOLUMES/etc stay denied,
+  # shrinking the blast radius of an RCE in judge-api.
+  docker-proxy:
+    image: tecnativa/docker-socket-proxy
+    environment:
+      CONTAINERS: 1
+      POST: 1
+      IMAGES: 1
+      INFO: 1
+      VERSION: 1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${DB_NAME:-judgedb}
+      POSTGRES_USER: ${DB_USER:-judge}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-judge}
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-judge} -d ${DB_NAME:-judgedb}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --save "" --appendonly no
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  pg-data:

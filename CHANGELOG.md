@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### feat: tối ưu hiệu năng Batch Runner & đa luồng Worker + lưu stdout/stderr (V23)
+
+- **Batch Runner trong 1 Docker container duy nhất**: Gom toàn bộ $N$ test cases chạy tuần tự trong cùng một container với script đo GNU time và capture output độc lập cho từng testcase. Giảm thời gian chấm 10-20 test cases từ ~8s xuống **~0.8s - 1.2s** (loại bỏ $N \times 450\text{ms}$ Docker setup overhead).
+- **Sửa lỗi khởi chạy Worker Pool**: `JudgeWorker` khởi chạy đủ $N$ worker thread song song theo cấu hình `judge.workers=4` thay vì chỉ 1 luồng duy nhất.
+- `submission_results.stdout` / `stderr` (cắt 8KB) — API `GET /submissions/{id}` trả trong `testResults[]` để client hiện diff WA.
+- `POST /submissions/test` nhận `input` (stdin): chạy một lần, không so expected, trả `stdout`/`stderr` top-level (sửa "Kiểm tra" của client đang gửi sẵn field này).
+- Chạy thử theo sample cũng sử dụng Batch Runner và trả `stdout` trên từng `testResults[]` và top-level (sample đầu).
+
 ### Đại tu độ tin cậy, bảo mật & lõi chấm (V18–V22)
 
 **Backup & vận hành**

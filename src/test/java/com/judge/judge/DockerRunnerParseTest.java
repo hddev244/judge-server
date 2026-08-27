@@ -46,4 +46,13 @@ class DockerRunnerParseTest {
                 "my program says: executable file not found in the maze"));
         assertFalse(DockerRunner.isDockerDaemonError("runtime error: index out of range"));
     }
+
+    @Test
+    void resolveContainerPath_transformsWorkDirToCode() {
+        assertEquals("/code/custom.in",
+                DockerRunner.resolveContainerPath("/tmp/judge/job123/custom.in", "/tmp/judge/job123"));
+        assertEquals("/data/problems/194/cases/1.in",
+                DockerRunner.resolveContainerPath("/data/problems/194/cases/1.in", "/tmp/judge/job123"));
+        assertEquals("", DockerRunner.resolveContainerPath(null, "/tmp/judge/job123"));
+    }
 }

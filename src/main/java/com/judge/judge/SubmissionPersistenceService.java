@@ -71,6 +71,13 @@ public class SubmissionPersistenceService {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void saveResult(String submissionId, Long testCaseId,
                            String verdict, int timeMs, int memoryKb, double scoreRatio) {
+        saveResult(submissionId, testCaseId, verdict, timeMs, memoryKb, scoreRatio, null, null);
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void saveResult(String submissionId, Long testCaseId,
+                           String verdict, int timeMs, int memoryKb, double scoreRatio,
+                           String stdout, String stderr) {
         submissionResultRepository.save(SubmissionResult.builder()
                 .submission(submissionRepository.getReferenceById(submissionId))
                 .testCase(testCaseId != null ? testCaseRepository.getReferenceById(testCaseId) : null)
@@ -78,7 +85,18 @@ public class SubmissionPersistenceService {
                 .timeMs(timeMs)
                 .memoryKb(memoryKb)
                 .scoreRatio(scoreRatio)
+                .stdout(clip(stdout))
+                .stderr(clip(stderr))
                 .build());
+    }
+
+    /** Cap stored output so a malicious/verbose program cannot bloat the DB. */
+    static final int STDOUT_CAP = 8192;
+
+    static String clip(String s) {
+        if (s == null || s.isEmpty()) return null;
+        if (s.length() <= STDOUT_CAP) return s;
+        return s.substring(0, STDOUT_CAP) + "\n...[truncated]";
     }
 
     /** Sets the final verdict and returns the submission with problem+results initialized. */

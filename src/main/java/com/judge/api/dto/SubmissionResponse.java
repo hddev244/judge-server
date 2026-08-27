@@ -21,6 +21,9 @@ public class SubmissionResponse {
     private String errorMessage;
     private String language;
     private String sourceCode;
+    /** Present on test-runs (custom stdin or first sample). */
+    private String stdout;
+    private String stderr;
     private boolean testRun;
     private LocalDateTime createdAt;
     private LocalDateTime finishedAt;
@@ -33,6 +36,8 @@ public class SubmissionResponse {
                         .status(r.getStatus())
                         .timeMs(r.getTimeMs())
                         .memoryKb(r.getMemoryKb())
+                        .stdout(r.getStdout())
+                        .stderr(r.getStderr())
                         .build()).toList();
 
         return SubmissionResponse.builder()
@@ -59,5 +64,7 @@ public class SubmissionResponse {
         private String status;
         private Integer timeMs;
         private Integer memoryKb;
+        private String stdout;
+        private String stderr;
     }
 }
