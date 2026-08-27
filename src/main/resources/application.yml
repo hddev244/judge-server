@@ -46,14 +46,14 @@ judge:
     cpp:
       image: ${JUDGE_LANG_CPP_IMAGE:judge-cpp:1}
       source-file: solution.cpp
-      compile-cmd: "g++ -O2 -std=c++17 -o solution solution.cpp"
+      compile-cmd: "g++ -O3 -std=c++17 -pipe -DONLINE_JUDGE -o solution solution.cpp"
       run-cmd: "./solution"
       time-multiplier: 1.0
     java:
       image: ${JUDGE_LANG_JAVA_IMAGE:judge-java:1}
       source-file: Solution.java
       compile-cmd: "javac -encoding UTF-8 Solution.java"
-      run-cmd: "java -cp /code -Xmx{mem}m Solution"
+      run-cmd: "java -XX:+TieredCompilation -XX:TieredStopAtLevel=1 -Xss64m -cp /code -Xmx{mem}m Solution"
       time-multiplier: 2.0
       memory-bonus-kb: 262144
     python:

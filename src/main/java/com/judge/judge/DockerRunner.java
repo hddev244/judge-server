@@ -63,6 +63,13 @@ public class DockerRunner {
 
     public record BatchTestCase(Long id, String inputPath) {}
 
+    public record BatchRunResult(
+            boolean compileSuccess,
+            String compileError,
+            boolean systemError,
+            Map<Long, RunResult> results
+    ) {}
+
     public RunResult run(String workDir, String language, String inputPath,
                          int timeLimitMs, int memoryKb) {
         Map<Long, RunResult> map = runBatch(workDir, language,
@@ -75,8 +82,16 @@ public class DockerRunner {
                                          List<BatchTestCase> testCases,
                                          int timeLimitMs, int memoryKb,
                                          boolean stopOnFail) {
+        return runBatchWithCompile(workDir, language, null, testCases, timeLimitMs, memoryKb, stopOnFail).results();
+    }
+
+    public BatchRunResult runBatchWithCompile(String workDir, String language,
+                                              String compileCmd,
+                                              List<BatchTestCase> testCases,
+                                              int timeLimitMs, int memoryKb,
+                                              boolean stopOnFail) {
         if (testCases == null || testCases.isEmpty()) {
-            return Collections.emptyMap();
+            return new BatchRunResult(true, null, false, Collections.emptyMap());
         }
 
         JudgeConfig.LanguageConfig lang = getLanguageConfig(language);
@@ -84,6 +99,7 @@ public class DockerRunner {
         long effectiveLimitMs = Math.round(timeLimitMs * multiplier);
 
         int memMb = (int) Math.max((memoryKb + lang.getMemoryBonusKb()) / 1024, 64);
+        int containerMemMb = (compileCmd != null && !compileCmd.isBlank()) ? Math.max(memMb, 512) : memMb;
         double wallSecs = effectiveLimitMs / 1000.0 + 1.0;
         String runCmd = lang.getRunCmd().replace("{mem}", String.valueOf(memMb));
 
@@ -97,12 +113,25 @@ public class DockerRunner {
             for (BatchTestCase tc : testCases) {
                 errMap.put(tc.id(), RunResult.dockerUnavailable("cannot create metrics dir: " + e.getMessage()));
             }
-            return errMap;
+            return new BatchRunResult(true, null, false, errMap);
         }
 
         // Generate batch_run.sh
         StringBuilder script = new StringBuilder();
-        script.append("#!/bin/sh\nset +e\n");
+        script.append("#!/bin/sh\nset +e\nmkdir -p /metrics\n");
+        if (compileCmd != null && !compileCmd.isBlank()) {
+            script.append(String.format(
+                    "%s 2> /metrics/compile.err\n" +
+                    "COMPILE_EC=$?\n" +
+                    "if [ \"$COMPILE_EC\" -ne 0 ]; then\n" +
+                    "  echo $COMPILE_EC > /metrics/compile.exit\n" +
+                    "  exit 0\n" +
+                    "fi\n" +
+                    "chmod 555 /code/solution 2>/dev/null || true\n",
+                    compileCmd
+            ));
+        }
+
         for (BatchTestCase tc : testCases) {
             String containerInput = resolveContainerPath(tc.inputPath(), workDir);
             script.append(String.format(
@@ -126,17 +155,17 @@ public class DockerRunner {
             for (BatchTestCase tc : testCases) {
                 errMap.put(tc.id(), RunResult.dockerUnavailable("cannot write batch script: " + e.getMessage()));
             }
-            return errMap;
+            return new BatchRunResult(true, null, false, errMap);
         }
 
         List<String> cmd = new ArrayList<>(List.of("docker", "run", "--rm"));
         cmd.addAll(baseSandboxFlags());
         cmd.addAll(List.of(
-                "--memory", memMb + "m",
-                "--memory-swap", memMb + "m",
+                "--memory", containerMemMb + "m",
+                "--memory-swap", containerMemMb + "m",
                 "--cpus", fmt(judgeConfig.getSandboxCpus()),
                 "--pids-limit", "64",
-                "-v", workDir + ":/code:ro",
+                "-v", workDir + ":/code" + (compileCmd != null && !compileCmd.isBlank() ? ":rw" : ":ro"),
                 "-v", metricsDir.toString() + ":/metrics",
                 "-v", judgeConfig.getTestcaseBasePath() + ":" + judgeConfig.getTestcaseBasePath() + ":ro",
                 "-w", "/code",
@@ -145,7 +174,8 @@ public class DockerRunner {
         ));
 
         long cap = judgeConfig.getOutputLimitBytes();
-        long totalTimeoutMs = Math.max(testCases.size() * (effectiveLimitMs + 1500L) + 5000L, 30000L);
+        long compileBufferMs = (compileCmd != null && !compileCmd.isBlank()) ? judgeConfig.getCompileTimeoutMs() : 0;
+        long totalTimeoutMs = Math.max(testCases.size() * (effectiveLimitMs + 1500L) + compileBufferMs + 5000L, 30000L);
 
         Map<Long, RunResult> results = new HashMap<>();
         try {
@@ -156,7 +186,16 @@ public class DockerRunner {
                 for (BatchTestCase tc : testCases) {
                     results.put(tc.id(), RunResult.dockerUnavailable(result.stderr().trim()));
                 }
-                return results;
+                return new BatchRunResult(true, null, true, results);
+            }
+
+            Path compileExitFile = metricsDir.resolve("compile.exit");
+            if (Files.exists(compileExitFile)) {
+                String compileErr = readCappedFile(metricsDir.resolve("compile.err"), 65536);
+                if (compileErr == null || compileErr.isBlank()) {
+                    compileErr = "Compilation failed with exit code " + readMetricsFile(metricsDir, "compile.exit");
+                }
+                return new BatchRunResult(false, compileErr.trim(), isDockerDaemonError(compileErr), Collections.emptyMap());
             }
 
             for (BatchTestCase tc : testCases) {
@@ -207,14 +246,15 @@ public class DockerRunner {
                         .build());
             }
 
+            return new BatchRunResult(true, null, false, results);
+
         } catch (IOException e) {
             log.error("Docker batch run failed, workDir={}", workDir, e);
             for (BatchTestCase tc : testCases) {
                 results.put(tc.id(), RunResult.dockerUnavailable(e.getMessage()));
             }
+            return new BatchRunResult(true, null, false, results);
         }
-
-        return results;
     }
 
     static String resolveContainerPath(String hostPath, String workDir) {
@@ -509,12 +549,12 @@ public class DockerRunner {
                 "--ulimit", "nofile=256:256",
                 "--ulimit", "fsize=67108864",
                 "--read-only",
-                "--tmpfs", "/tmp:size=64m"
+                "--tmpfs", "/tmp:size=64m,noexec,nosuid,nodev"
         );
     }
 
     /** Sandbox runs as uid 1000; dirs created by the (root) API process must be opened up. */
-    private static void makeWritableByAll(Path dir) {
+    static void makeWritableByAll(Path dir) {
         try {
             Files.setPosixFilePermissions(dir,
                     java.nio.file.attribute.PosixFilePermissions.fromString("rwxrwxrwx"));

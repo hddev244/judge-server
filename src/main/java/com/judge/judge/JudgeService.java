@@ -102,22 +102,11 @@ public class JudgeService {
 
         List<JudgeStatusPublisher.TestCaseUpdate> partialResults = new ArrayList<>();
         try {
-            CompileResult compileResult = dockerRunner.compile(
-                    job.language(), job.sourceCode(), submissionId);
-
-            if (compileResult.isSystemError()) {
-                log.error("Docker unavailable during compile for submission {}", submissionId);
-                Submission s = persistence.failSubmission(submissionId, "SE",
-                        "Docker daemon unavailable: " + compileResult.getErrorOutput());
-                statusPublisher.publishFinal(s, List.of());
-                return;
-            }
-            if (!compileResult.isSuccess()) {
-                Submission s = persistence.failSubmission(submissionId, "CE",
-                        compileResult.getErrorOutput());
-                statusPublisher.publishFinal(s, List.of());
-                return;
-            }
+            JudgeConfig.LanguageConfig lang = judgeConfig.getLanguages().get(job.language());
+            java.nio.file.Path workDir = java.nio.file.Path.of(judgeConfig.getWorkBase(), submissionId);
+            java.nio.file.Files.createDirectories(workDir);
+            DockerRunner.makeWritableByAll(workDir);
+            java.nio.file.Files.writeString(workDir.resolve(lang.getSourceFile()), job.sourceCode());
 
             // Ratio (0..1) awarded per test-case id; ScoringService aggregates it.
             Map<Long, Double> caseRatios = new HashMap<>();
@@ -128,6 +117,24 @@ public class JudgeService {
             String mode = job.judgingMode() != null ? job.judgingMode() : "ALL";
 
             if ("INTERACTIVE".equals(job.checkerType()) && job.checkerBinPath() != null) {
+                if (lang.getCompileCmd() != null && !lang.getCompileCmd().isBlank()) {
+                    CompileResult compileResult = dockerRunner.compile(
+                            job.language(), job.sourceCode(), submissionId);
+
+                    if (compileResult.isSystemError()) {
+                        log.error("Docker unavailable during compile for submission {}", submissionId);
+                        Submission s = persistence.failSubmission(submissionId, "SE",
+                                "Docker daemon unavailable: " + compileResult.getErrorOutput());
+                        statusPublisher.publishFinal(s, List.of());
+                        return;
+                    }
+                    if (!compileResult.isSuccess()) {
+                        Submission s = persistence.failSubmission(submissionId, "CE",
+                                compileResult.getErrorOutput());
+                        statusPublisher.publishFinal(s, List.of());
+                        return;
+                    }
+                }
                 for (JudgeJob.TestCaseView tc : job.testCases()) {
                     boolean skip = ("SUBTASK_SKIP".equals(mode) && tc.subtaskId() != null
                                     && failedSubtasks.contains(tc.subtaskId()))
@@ -139,7 +146,7 @@ public class JudgeService {
                     }
 
                     var ir = dockerRunner.runInteractive(
-                            compileResult.getWorkDir(), job.language(),
+                            workDir.toString(), job.language(),
                             job.checkerBinPath(), job.checkerLanguage(),
                             tc.inputPath(), tc.outputPath(), job.timeLimitMs(), job.memoryLimitKb());
                     CaseOutcome oc = new CaseOutcome(ir.verdict(), ir.ratio());
@@ -168,9 +175,18 @@ public class JudgeService {
                         .map(tc -> new DockerRunner.BatchTestCase(tc.id(), tc.inputPath()))
                         .toList();
 
-                Map<Long, RunResult> runResults = dockerRunner.runBatch(
-                        compileResult.getWorkDir(), job.language(),
+                DockerRunner.BatchRunResult batchOutput = dockerRunner.runBatchWithCompile(
+                        workDir.toString(), job.language(), lang.getCompileCmd(),
                         batchCases, job.timeLimitMs(), job.memoryLimitKb(), stopOnFail);
+
+                if (!batchOutput.compileSuccess()) {
+                    String verdict = batchOutput.systemError() ? "SE" : "CE";
+                    Submission s = persistence.failSubmission(submissionId, verdict, batchOutput.compileError());
+                    statusPublisher.publishFinal(s, List.of());
+                    return;
+                }
+
+                Map<Long, RunResult> runResults = batchOutput.results();
 
                 for (JudgeJob.TestCaseView tc : job.testCases()) {
                     boolean skip = ("SUBTASK_SKIP".equals(mode) && tc.subtaskId() != null
@@ -189,7 +205,7 @@ public class JudgeService {
                         continue;
                     }
 
-                    CaseOutcome oc = evaluate(rr, tc.inputPath(), tc.outputPath(), job, compileResult.getWorkDir());
+                    CaseOutcome oc = evaluate(rr, tc.inputPath(), tc.outputPath(), job, workDir.toString());
                     int caseTimeMs = (int) rr.getTimeMs();
                     int caseMemKb = (int) rr.getMemoryKb();
                     String stdout = rr.getStdout();
@@ -232,7 +248,8 @@ public class JudgeService {
     }
 
     public SubmissionResponse runTest(TestRunRequest req) {
-        if (!judgeConfig.getLanguages().containsKey(req.getLanguage())) {
+        JudgeConfig.LanguageConfig lang = judgeConfig.getLanguages().get(req.getLanguage());
+        if (lang == null) {
             throw JudgeException.badRequest("Unsupported language: " + req.getLanguage());
         }
 
@@ -252,21 +269,29 @@ public class JudgeService {
         }
 
         String jobId = "test_" + UUID.randomUUID().toString().replace("-", "").substring(0, 10);
+        java.nio.file.Path workDir = java.nio.file.Path.of(judgeConfig.getWorkBase(), jobId);
         try {
-            CompileResult cr = dockerRunner.compile(req.getLanguage(), req.getSourceCode(), jobId);
-            if (!cr.isSuccess()) {
-                return SubmissionResponse.builder()
-                        .status("CE").score(0).testRun(true)
-                        .errorMessage(cr.getErrorOutput())
-                        .language(req.getLanguage()).testResults(List.of()).build();
-            }
+            java.nio.file.Files.createDirectories(workDir);
+            DockerRunner.makeWritableByAll(workDir);
+            java.nio.file.Files.writeString(workDir.resolve(lang.getSourceFile()), req.getSourceCode());
 
             if (req.getInput() != null && !req.getInput().isBlank()) {
-                java.nio.file.Path in = java.nio.file.Path.of(cr.getWorkDir(), "custom.in");
+                java.nio.file.Path in = workDir.resolve("custom.in");
                 java.nio.file.Files.writeString(in, req.getInput());
-                RunResult rr = dockerRunner.run(
-                        cr.getWorkDir(), req.getLanguage(), in.toString(),
-                        problem.getTimeLimitMs(), problem.getMemoryLimitKb());
+
+                DockerRunner.BatchRunResult batchOutput = dockerRunner.runBatchWithCompile(
+                        workDir.toString(), req.getLanguage(), lang.getCompileCmd(),
+                        List.of(new DockerRunner.BatchTestCase(1L, in.toString())),
+                        problem.getTimeLimitMs(), problem.getMemoryLimitKb(), false);
+
+                if (!batchOutput.compileSuccess()) {
+                    return SubmissionResponse.builder()
+                            .status(batchOutput.systemError() ? "SE" : "CE").score(0).testRun(true)
+                            .errorMessage(batchOutput.compileError())
+                            .language(req.getLanguage()).testResults(List.of()).build();
+                }
+
+                RunResult rr = batchOutput.results().getOrDefault(1L, RunResult.dockerUnavailable("no result returned"));
                 String status = runStatus(rr);
                 return SubmissionResponse.builder()
                         .status(status).score(0)
@@ -284,9 +309,18 @@ public class JudgeService {
             long maxTimeMs = 0;
 
             if ("INTERACTIVE".equals(problem.getCheckerType()) && problem.getCheckerBinPath() != null) {
+                if (lang.getCompileCmd() != null && !lang.getCompileCmd().isBlank()) {
+                    CompileResult cr = dockerRunner.compile(req.getLanguage(), req.getSourceCode(), jobId);
+                    if (!cr.isSuccess()) {
+                        return SubmissionResponse.builder()
+                                .status("CE").score(0).testRun(true)
+                                .errorMessage(cr.getErrorOutput())
+                                .language(req.getLanguage()).testResults(List.of()).build();
+                    }
+                }
                 for (TestCase tc : samples) {
                     var ir = dockerRunner.runInteractive(
-                            cr.getWorkDir(), req.getLanguage(),
+                            workDir.toString(), req.getLanguage(),
                             problem.getCheckerBinPath(), problem.getCheckerLanguage(),
                             tc.getInputPath(), tc.getOutputPath(),
                             problem.getTimeLimitMs(), problem.getMemoryLimitKb());
@@ -305,9 +339,19 @@ public class JudgeService {
                 List<DockerRunner.BatchTestCase> batchCases = samples.stream()
                         .map(tc -> new DockerRunner.BatchTestCase(tc.getId(), tc.getInputPath()))
                         .toList();
-                Map<Long, RunResult> runResults = dockerRunner.runBatch(
-                        cr.getWorkDir(), req.getLanguage(), batchCases,
-                        problem.getTimeLimitMs(), problem.getMemoryLimitKb(), false);
+
+                DockerRunner.BatchRunResult batchOutput = dockerRunner.runBatchWithCompile(
+                        workDir.toString(), req.getLanguage(), lang.getCompileCmd(),
+                        batchCases, problem.getTimeLimitMs(), problem.getMemoryLimitKb(), false);
+
+                if (!batchOutput.compileSuccess()) {
+                    return SubmissionResponse.builder()
+                            .status(batchOutput.systemError() ? "SE" : "CE").score(0).testRun(true)
+                            .errorMessage(batchOutput.compileError())
+                            .language(req.getLanguage()).testResults(List.of()).build();
+                }
+
+                Map<Long, RunResult> runResults = batchOutput.results();
 
                 for (TestCase tc : samples) {
                     RunResult rr = runResults.get(tc.getId());
@@ -317,7 +361,7 @@ public class JudgeService {
                     if (rr != null) {
                         oc = evaluate(rr, tc.getInputPath(), tc.getOutputPath(),
                                 problem.getCheckerType(), problem.getCheckerLanguage(), problem.getCheckerBinPath(),
-                                problem.getComparisonMode(), problem.getFloatEpsilon(), cr.getWorkDir());
+                                problem.getComparisonMode(), problem.getFloatEpsilon(), workDir.toString());
                         caseTimeMs = (int) rr.getTimeMs();
                         caseMemKb = (int) rr.getMemoryKb();
                         stdout = rr.getStdout();
