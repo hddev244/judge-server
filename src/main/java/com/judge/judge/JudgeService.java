@@ -276,6 +276,18 @@ public class JudgeService {
             java.nio.file.Files.writeString(workDir.resolve(lang.getSourceFile()), req.getSourceCode());
 
             if (req.getInput() != null && !req.getInput().isBlank()) {
+                String customInTrimmed = req.getInput().trim().replaceAll("\r\n", "\n");
+                TestCase matchedSample = null;
+                for (TestCase s : samples) {
+                    try {
+                        String sampleInContent = java.nio.file.Files.readString(java.nio.file.Path.of(s.getInputPath())).trim().replaceAll("\r\n", "\n");
+                        if (customInTrimmed.equals(sampleInContent)) {
+                            matchedSample = s;
+                            break;
+                        }
+                    } catch (Exception ignored) {}
+                }
+
                 java.nio.file.Path in = workDir.resolve("custom.in");
                 java.nio.file.Files.writeString(in, req.getInput());
 
@@ -292,7 +304,37 @@ public class JudgeService {
                 }
 
                 RunResult rr = batchOutput.results().getOrDefault(1L, RunResult.dockerUnavailable("no result returned"));
-                String status = runStatus(rr);
+
+                if (matchedSample != null) {
+                    CaseOutcome oc = evaluate(rr, matchedSample.getInputPath(), matchedSample.getOutputPath(),
+                            problem.getCheckerType(), problem.getCheckerLanguage(), problem.getCheckerBinPath(),
+                            problem.getComparisonMode(), problem.getFloatEpsilon(), workDir.toString());
+                    String expected = null;
+                    try {
+                        expected = java.nio.file.Files.readString(java.nio.file.Path.of(matchedSample.getOutputPath()));
+                    } catch (Exception ignored) {}
+
+                    return SubmissionResponse.builder()
+                            .status(oc.verdict()).score(0)
+                            .timeMs((int) rr.getTimeMs())
+                            .memoryKb((int) rr.getMemoryKb())
+                            .stdout(rr.getStdout())
+                            .stderr(rr.getStderr())
+                            .expectedOutput(expected)
+                            .testRun(true).language(req.getLanguage())
+                            .testResults(List.of(SubmissionResponse.TestResultDto.builder()
+                                    .testCaseId(matchedSample.getId())
+                                    .status(oc.verdict())
+                                    .timeMs((int) rr.getTimeMs())
+                                    .memoryKb((int) rr.getMemoryKb())
+                                    .stdout(rr.getStdout())
+                                    .stderr(rr.getStderr())
+                                    .expectedOutput(expected)
+                                    .build()))
+                            .build();
+                }
+
+                String status = customRunStatus(rr);
                 return SubmissionResponse.builder()
                         .status(status).score(0)
                         .timeMs((int) rr.getTimeMs())
@@ -358,6 +400,10 @@ public class JudgeService {
                     CaseOutcome oc;
                     int caseTimeMs = 0, caseMemKb = 0;
                     String stdout = null, stderr = null;
+                    String expected = null;
+                    try {
+                        expected = java.nio.file.Files.readString(java.nio.file.Path.of(tc.getOutputPath()));
+                    } catch (Exception ignored) {}
                     if (rr != null) {
                         oc = evaluate(rr, tc.getInputPath(), tc.getOutputPath(),
                                 problem.getCheckerType(), problem.getCheckerLanguage(), problem.getCheckerBinPath(),
@@ -373,6 +419,7 @@ public class JudgeService {
                             .testCaseId(tc.getId()).status(oc.verdict())
                             .timeMs(caseTimeMs).memoryKb(caseMemKb)
                             .stdout(stdout).stderr(stderr)
+                            .expectedOutput(expected)
                             .build());
                     totalScore += (int) Math.round(tc.getScore() * oc.ratio());
                     if (!"AC".equals(oc.verdict()) && "AC".equals(finalVerdict)) finalVerdict = oc.verdict();
@@ -381,9 +428,11 @@ public class JudgeService {
             }
 
             String firstOut = results.isEmpty() ? null : results.get(0).getStdout();
+            String firstExpected = results.isEmpty() ? null : results.get(0).getExpectedOutput();
             return SubmissionResponse.builder()
                     .status(finalVerdict).score(totalScore).timeMs((int) maxTimeMs)
                     .stdout(firstOut)
+                    .expectedOutput(firstExpected)
                     .testRun(true).language(req.getLanguage()).testResults(results).build();
 
         } catch (IOException e) {
@@ -401,6 +450,14 @@ public class JudgeService {
     public record CaseOutcome(String verdict, double ratio) {
         static CaseOutcome ac()          { return new CaseOutcome("AC", 1.0); }
         static CaseOutcome of(String v)  { return new CaseOutcome(v, "AC".equals(v) ? 1.0 : 0.0); }
+    }
+
+    private static String customRunStatus(RunResult rr) {
+        if (rr.isSystemError())    return "SE";
+        if (rr.isTimedOut())       return "TLE";
+        if (rr.isMemoryExceeded()) return "MLE";
+        if (rr.getExitCode() != 0) return "RE";
+        return "OK";
     }
 
     private static String runStatus(RunResult rr) {

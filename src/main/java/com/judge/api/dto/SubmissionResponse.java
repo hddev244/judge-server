@@ -24,6 +24,7 @@ public class SubmissionResponse {
     /** Present on test-runs (custom stdin or first sample). */
     private String stdout;
     private String stderr;
+    private String expectedOutput;
     private boolean testRun;
     private LocalDateTime createdAt;
     private LocalDateTime finishedAt;
@@ -66,5 +67,6 @@ public class SubmissionResponse {
         private Integer memoryKb;
         private String stdout;
         private String stderr;
+        private String expectedOutput;
     }
 }
