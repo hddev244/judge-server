@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.List;
 
@@ -309,6 +310,36 @@ public class ProblemService {
                 throw JudgeException.forbidden("Subtask does not belong to this problem");
             }
             tc.setSubtask(subtask);
+        }
+        String effectiveInput = req.getEffectiveInput();
+        if (effectiveInput != null) {
+            try {
+                Path inPath = (tc.getInputPath() != null && !tc.getInputPath().isBlank())
+                        ? Path.of(tc.getInputPath())
+                        : Path.of(basePath, String.valueOf(problemId), "cases", tc.getId() + ".in");
+                if (inPath.getParent() != null) {
+                    Files.createDirectories(inPath.getParent());
+                }
+                Files.writeString(inPath, effectiveInput, StandardCharsets.UTF_8);
+                tc.setInputPath(inPath.toString());
+            } catch (IOException e) {
+                throw new RuntimeException("Failed to write test case input: " + e.getMessage(), e);
+            }
+        }
+        String effectiveOutput = req.getEffectiveOutput();
+        if (effectiveOutput != null) {
+            try {
+                Path outPath = (tc.getOutputPath() != null && !tc.getOutputPath().isBlank())
+                        ? Path.of(tc.getOutputPath())
+                        : Path.of(basePath, String.valueOf(problemId), "cases", tc.getId() + ".out");
+                if (outPath.getParent() != null) {
+                    Files.createDirectories(outPath.getParent());
+                }
+                Files.writeString(outPath, effectiveOutput, StandardCharsets.UTF_8);
+                tc.setOutputPath(outPath.toString());
+            } catch (IOException e) {
+                throw new RuntimeException("Failed to write test case output: " + e.getMessage(), e);
+            }
         }
         return TestCaseResponse.from(testCaseRepository.save(tc));
     }
