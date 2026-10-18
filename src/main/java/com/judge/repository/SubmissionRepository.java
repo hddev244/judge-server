@@ -77,11 +77,13 @@ public interface SubmissionRepository extends JpaRepository<Submission, String> 
               AND (:problemSlug IS NULL OR s.problem.slug = :problemSlug)
               AND (:userRef     IS NULL OR s.userRef     = :userRef)
               AND (:status      IS NULL OR s.status      = :status)
+              AND (:clientId    IS NULL OR s.client.id   = :clientId)
             ORDER BY s.createdAt DESC
             """)
     org.springframework.data.domain.Page<Submission> findByFilters(
             @Param("problemSlug") String problemSlug,
             @Param("userRef")     String userRef,
             @Param("status")      String status,
+            @Param("clientId")    Long clientId,
             org.springframework.data.domain.Pageable pageable);
 }

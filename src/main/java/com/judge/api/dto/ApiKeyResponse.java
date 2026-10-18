@@ -2,6 +2,7 @@ package com.judge.api.dto;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.judge.domain.ApiKey;
+import com.judge.domain.ApiKeyRole;
 import lombok.Builder;
 import lombok.Data;
 import java.time.LocalDateTime;
@@ -17,6 +18,7 @@ public class ApiKeyResponse {
     private String clientName;
     private boolean isActive;
     private boolean isAdmin;
+    private ApiKeyRole role;
     private int rateLimitPerHour;
     private LocalDateTime createdAt;
 
@@ -32,6 +34,7 @@ public class ApiKeyResponse {
                 .clientName(k.getClientName())
                 .isActive(k.isActive())
                 .isAdmin(k.isAdmin())
+                .role(k.getRole())
                 .rateLimitPerHour(k.getRateLimitPerHour())
                 .createdAt(k.getCreatedAt())
                 .build();

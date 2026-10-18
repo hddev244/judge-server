@@ -58,13 +58,13 @@ docker compose up -d
 curl http://localhost:8080/actuator/health
 ```
 
-Lần đầu khởi động, tạo API key admin:
+Lần đầu: tạo admin key + key GRADER (không còn cột plaintext `key` — dùng script):
 
 ```bash
-docker compose exec postgres psql -U judge judgedb -c \
-  "INSERT INTO api_keys(key,client_name,is_active,is_admin,rate_limit_per_hour) \
-   VALUES ('sk_admin_local','admin',true,true,9999);"
+./scripts/bootstrap-grader.sh --url http://127.0.0.1:8080
 ```
+
+**Tự host để chấm cho lớp trên Thi247.vn?** Làm theo **[`docs/SELF_HOSTING_GRADER.md`](./docs/SELF_HOSTING_GRADER.md)** (local + VPS + HTTPS + kết nối tab *Máy chấm riêng*).
 
 ## Cấu hình ngôn ngữ
 
@@ -293,6 +293,9 @@ Khi tạo/cập nhật problem có thể gán đồng thời:
 > **Đang tích hợp sẵn và vừa nâng cấp Judge Server?** Xem
 > **[`docs/CLIENT_UPGRADE.md`](./docs/CLIENT_UPGRADE.md)** — những thay đổi ảnh hưởng client
 > (verdict `PC`/`SKIPPED`, `memoryKb`/`timeMs` đổi nghĩa, API key chỉ trả 1 lần) và checklist cần làm.
+>
+> **Tự host để chấm bài cho lớp trên Thi247?** Xem **[`docs/SELF_HOSTING_GRADER.md`](./docs/SELF_HOSTING_GRADER.md)**
+> — local / VPS, key role `GRADER` (`gk_…`), `JUDGE_WEBHOOK_SECRET`, Caddy HTTPS.
 
 ### Bước 1 — Tạo API Key
 

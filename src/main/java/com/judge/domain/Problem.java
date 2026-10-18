@@ -86,6 +86,18 @@ public class Problem {
     @Column(name = "allowed_languages", length = 100)
     private String allowedLanguages;
 
+    /** Upstream platform's id for a problem pushed by a GRADER key; null for locally authored problems. */
+    @Column(name = "external_key", length = 64)
+    private String externalKey;
+
+    /** GRADER key that owns this problem; grader endpoints only ever see their own problems. */
+    @Column(name = "owner_key_id")
+    private Long ownerKeyId;
+
+    /** SHA-256 of the canonical package last applied via the grader upsert. */
+    @Column(name = "package_hash", length = 64)
+    private String packageHash;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

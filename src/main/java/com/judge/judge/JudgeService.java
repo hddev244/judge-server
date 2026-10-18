@@ -253,8 +253,12 @@ public class JudgeService {
             throw JudgeException.badRequest("Unsupported language: " + req.getLanguage());
         }
 
+        com.judge.domain.ApiKey caller = com.judge.security.ApiKeyContext.get();
+        boolean grader = caller != null && caller.isGrader();
         Problem problem = problemRepository.findById(req.getProblemId())
-                .filter(p -> !"PRIVATE".equals(p.getStatus()))
+                .filter(p -> grader
+                        ? com.judge.service.ProblemPackageService.isOwnedBy(p, caller)
+                        : !"PRIVATE".equals(p.getStatus()))
                 .orElseThrow(() -> JudgeException.notFound("Problem not found or not available"));
 
         List<TestCase> samples = testCaseRepository

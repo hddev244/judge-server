@@ -31,14 +31,37 @@ public class ApiKey {
     @Column(name = "is_admin", nullable = false)
     private boolean isAdmin;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "role", nullable = false, length = 20)
+    @Builder.Default
+    private ApiKeyRole role = ApiKeyRole.CLIENT;
+
     @Column(name = "rate_limit_per_hour", nullable = false)
     private int rateLimitPerHour;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    public boolean isGrader() {
+        return role == ApiKeyRole.GRADER;
+    }
+
     @PrePersist
     void prePersist() {
         createdAt = LocalDateTime.now();
+        syncAdminFlag();
+    }
+
+    @PreUpdate
+    void preUpdate() {
+        syncAdminFlag();
+    }
+
+    private void syncAdminFlag() {
+        // Legacy callers only set isAdmin(true); never let that silently downgrade to CLIENT.
+        if (role == null || (isAdmin && role == ApiKeyRole.CLIENT)) {
+            role = isAdmin ? ApiKeyRole.ADMIN : ApiKeyRole.CLIENT;
+        }
+        isAdmin = role == ApiKeyRole.ADMIN;
     }
 }

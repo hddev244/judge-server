@@ -2,7 +2,8 @@ services:
   judge-api:
     build: .
     ports:
-      - "${SERVER_PORT:-8080}:8433"
+      # VPS: JUDGE_BIND=127.0.0.1 trong .env rồi để Caddy/Nginx terminate TLS.
+      - "${JUDGE_BIND:-0.0.0.0}:${SERVER_PORT:-8080}:8433"
     env_file:
       - .env
     environment:

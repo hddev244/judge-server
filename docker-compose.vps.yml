@@ -1,0 +1,8 @@
+# Overlay VPS: đánh dấu stack production. Bind loopback được set bằng
+# JUDGE_BIND=127.0.0.1 trong .env (xem docker-compose.yml).
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.vps.yml up -d --build
+services:
+  judge-api:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

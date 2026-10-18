@@ -1,0 +1,7 @@
+# Sao chép tới /etc/caddy/Caddyfile rồi thay tên miền.
+# Caddy tự xin chứng chỉ Let's Encrypt (cần DNS A + cổng 80/443).
+
+judge.example.edu.vn {
+	encode gzip
+	reverse_proxy 127.0.0.1:8080
+}

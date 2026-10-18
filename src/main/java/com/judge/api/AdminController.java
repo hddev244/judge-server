@@ -2,6 +2,7 @@ package com.judge.api;
 
 import com.judge.api.dto.*;
 import com.judge.domain.ApiKey;
+import com.judge.domain.ApiKeyRole;
 import com.judge.exception.JudgeException;
 import com.judge.repository.ApiKeyRepository;
 import com.judge.repository.ProblemRepository;
@@ -46,13 +47,16 @@ public class AdminController {
     @PostMapping("/api-keys")
     public ResponseEntity<ApiKeyResponse> createKey(@RequestBody @Valid ApiKeyRequest req) {
         requireAdmin();
-        String raw = "sk_" + UUID.randomUUID().toString().replace("-", "");
+        ApiKeyRole role = req.resolvedRole();
+        // Grader keys get a distinct prefix so operators can tell them apart in listings/logs.
+        String raw = (role == ApiKeyRole.GRADER ? "gk_" : "sk_") + UUID.randomUUID().toString().replace("-", "");
         ApiKey key = ApiKey.builder()
                 .keyHash(ApiKeyFilter.sha256Hex(raw))
                 .keyPrefix(raw.substring(0, 8))
                 .clientName(req.getClientName())
                 .isActive(true)
-                .isAdmin(req.isAdmin())
+                .isAdmin(role == ApiKeyRole.ADMIN)
+                .role(role)
                 .rateLimitPerHour(req.getRateLimitPerHour())
                 .build();
         // Raw key is returned exactly once here; only its hash is stored.

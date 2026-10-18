@@ -7,6 +7,7 @@ import com.judge.domain.WebhookRetry;
 import com.judge.repository.WebhookRetryRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
@@ -27,12 +28,19 @@ public class WebhookSender {
     private final WebhookRetryRepository retryRepository;
     private final ObjectMapper objectMapper;
     private final RestTemplate restTemplate;
+    private final String webhookSecret;
 
     public WebhookSender(WebhookRetryRepository retryRepository,
-                         ObjectMapper objectMapper) {
+                         ObjectMapper objectMapper,
+                         @Value("${JUDGE_WEBHOOK_SECRET:${judge.webhook-secret:}}") String webhookSecret) {
         this.retryRepository = retryRepository;
         this.objectMapper = objectMapper;
         this.restTemplate = new RestTemplate();
+        this.webhookSecret = webhookSecret;
+    }
+
+    public boolean hasDedicatedSecret() {
+        return webhookSecret != null && !webhookSecret.isBlank();
     }
 
     @Async
@@ -41,7 +49,9 @@ public class WebhookSender {
         try {
             SubmissionResponse payload = SubmissionResponse.from(submission);
             String json = objectMapper.writeValueAsString(payload);
-            String signature = sign(json, submission.getCallbackUrl());
+            // Legacy protocol keys the HMAC with the callback URL, which every caller sees; a
+            // dedicated secret is the only signature an upstream can actually trust.
+            String signature = sign(json, hasDedicatedSecret() ? webhookSecret : submission.getCallbackUrl());
             send(submission.getCallbackUrl(), json, signature, submission.getId());
         } catch (Exception e) {
             log.error("Failed to send webhook for {}", submission.getId(), e);

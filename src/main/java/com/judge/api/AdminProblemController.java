@@ -4,6 +4,7 @@ import com.judge.api.dto.*;
 import com.judge.exception.JudgeException;
 import com.judge.security.ApiKeyContext;
 import com.judge.service.ProblemImportService;
+import com.judge.service.ProblemPackageService;
 import com.judge.service.ProblemService;
 import jakarta.validation.Valid;
 import org.springframework.http.MediaType;
@@ -20,11 +21,14 @@ public class AdminProblemController {
 
     private final ProblemService problemService;
     private final ProblemImportService importService;
+    private final ProblemPackageService packageService;
 
     public AdminProblemController(ProblemService problemService,
-                                   ProblemImportService importService) {
+                                   ProblemImportService importService,
+                                   ProblemPackageService packageService) {
         this.problemService = problemService;
         this.importService = importService;
+        this.packageService = packageService;
     }
 
     // ─── Problem CRUD ───────────────────────────────────────────────────────
@@ -33,6 +37,16 @@ public class AdminProblemController {
     public ResponseEntity<ProblemResponse> getById(@PathVariable Long id) {
         requireAdmin();
         return ResponseEntity.ok(problemService.getById(id));
+    }
+
+    /** Lossless grading package for replicating this problem onto a grader judge. */
+    @GetMapping("/{id}/package")
+    public ResponseEntity<ProblemPackage> exportPackage(@PathVariable Long id) {
+        requireAdmin();
+        ProblemPackage pkg = packageService.export(id);
+        return ResponseEntity.ok()
+                .header("X-Package-Hash", ProblemPackageService.hash(pkg))
+                .body(pkg);
     }
 
     @PostMapping

@@ -1,0 +1,10 @@
+# Overlay khi chạy máy chấm trên cùng host với backend Thi247 (dev).
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --build
+#
+# Linux không có host.docker.internal sẵn — webhook từ container về
+# http://host.docker.internal:8080/... cần dòng extra_hosts này.
+services:
+  judge-api:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

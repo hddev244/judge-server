@@ -2,6 +2,7 @@ package com.judge.service;
 
 import com.judge.api.dto.SubmitRequest;
 import com.judge.api.dto.SubmissionResponse;
+import com.judge.domain.ApiKey;
 import com.judge.domain.Contest;
 import com.judge.domain.Problem;
 import com.judge.domain.Submission;
@@ -38,9 +39,20 @@ public class SubmissionService {
         Problem problem = problemRepository.findById(req.getProblemId())
                 .orElseThrow(() -> JudgeException.notFound("Problem not found"));
 
-        String problemStatus = problem.getStatus() != null ? problem.getStatus() : "PRIVATE";
-        if ("PRIVATE".equals(problemStatus)) {
-            throw JudgeException.notFound("Problem not found or not available");
+        ApiKey caller = ApiKeyContext.get();
+        if (caller != null && caller.isGrader()) {
+            // Graders judge only the (private) problems they pushed, and never join contests.
+            if (!ProblemPackageService.isOwnedBy(problem, caller)) {
+                throw JudgeException.notFound("Problem not found or not available");
+            }
+            if (req.getContestId() != null) {
+                throw JudgeException.forbidden("Grader keys cannot submit to contests");
+            }
+        } else {
+            String problemStatus = problem.getStatus() != null ? problem.getStatus() : "PRIVATE";
+            if ("PRIVATE".equals(problemStatus)) {
+                throw JudgeException.notFound("Problem not found or not available");
+            }
         }
 
         if (problem.getAllowedLanguages() != null && !problem.getAllowedLanguages().isBlank()) {
@@ -80,14 +92,24 @@ public class SubmissionService {
     public SubmissionResponse getById(String id) {
         Submission submission = submissionRepository.findByIdWithResults(id)
                 .orElseThrow(() -> JudgeException.notFound("Submission not found: " + id));
+        Long scope = graderScope();
+        if (scope != null && (submission.getClient() == null || !scope.equals(submission.getClient().getId()))) {
+            throw JudgeException.notFound("Submission not found: " + id);
+        }
         return SubmissionResponse.from(submission);
     }
 
     @Transactional(readOnly = true)
     public Page<SubmissionResponse> list(String problemSlug, String userRef, String status, int page, int size) {
         return submissionRepository.findByFilters(
-                problemSlug, userRef, status,
+                problemSlug, userRef, status, graderScope(),
                 PageRequest.of(page, Math.min(size, 100), Sort.by("createdAt").descending())
         ).map(SubmissionResponse::from);
+    }
+
+    /** Grader keys only ever see submissions they created; null = unscoped. */
+    private static Long graderScope() {
+        ApiKey caller = ApiKeyContext.get();
+        return caller != null && caller.isGrader() ? caller.getId() : null;
     }
 }

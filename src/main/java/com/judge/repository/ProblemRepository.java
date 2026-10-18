@@ -17,4 +17,5 @@ public interface ProblemRepository extends JpaRepository<Problem, Long>,
     List<Problem> findByStatusOrderByIdAsc(String status);
     Page<Problem> findByStatus(String status, Pageable pageable);
     List<Problem> findAllByOrderByIdAsc();
+    Optional<Problem> findByOwnerKeyIdAndExternalKey(Long ownerKeyId, String externalKey);
 }
