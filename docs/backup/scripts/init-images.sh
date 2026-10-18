@@ -10,10 +10,12 @@ echo "Pulling base images..."
 docker pull gcc:13
 docker pull eclipse-temurin:21
 docker pull python:3.12-slim
+docker pull debian:bookworm-slim
 
 echo "Building judge sandbox images..."
 docker build -t judge-cpp:1    "$DIR/cpp"
 docker build -t judge-java:1   "$DIR/java"
 docker build -t judge-python:1 "$DIR/python"
+docker build -t judge-pascal:1 "$DIR/pascal"
 
 echo "Done."

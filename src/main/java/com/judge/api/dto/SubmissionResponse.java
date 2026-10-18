@@ -13,6 +13,7 @@ import java.util.List;
 @Builder
 public class SubmissionResponse {
     private String submissionId;
+    private String userRef;
     private String problemSlug;
     private String status;
     private int score;
@@ -43,6 +44,7 @@ public class SubmissionResponse {
 
         return SubmissionResponse.builder()
                 .submissionId(s.getId())
+                .userRef(s.getUserRef())
                 .problemSlug(s.getProblem() != null ? s.getProblem().getSlug() : null)
                 .status(s.getStatus())
                 .score(s.getScore())

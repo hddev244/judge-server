@@ -354,6 +354,7 @@ code{font-family:var(--mono);font-size:12px;background:var(--surface2);padding:2
         <label class="form-check"><input type="checkbox" id="p-lang-cpp" value="cpp" checked/> C++</label>
         <label class="form-check"><input type="checkbox" id="p-lang-java" value="java" checked/> Java</label>
         <label class="form-check"><input type="checkbox" id="p-lang-python" value="python" checked/> Python</label>
+        <label class="form-check"><input type="checkbox" id="p-lang-pascal" value="pascal" checked/> Pascal</label>
       </div>
     </div>
     <div class="form-group">
@@ -403,6 +404,7 @@ code{font-family:var(--mono);font-size:12px;background:var(--surface2);padding:2
         <label class="form-check"><input type="checkbox" id="ep-lang-cpp" value="cpp"/> C++</label>
         <label class="form-check"><input type="checkbox" id="ep-lang-java" value="java"/> Java</label>
         <label class="form-check"><input type="checkbox" id="ep-lang-python" value="python"/> Python</label>
+        <label class="form-check"><input type="checkbox" id="ep-lang-pascal" value="pascal"/> Pascal</label>
       </div>
     </div>
     <div class="form-group">
@@ -585,6 +587,7 @@ code{font-family:var(--mono);font-size:12px;background:var(--surface2);padding:2
         <option value="cpp">C++ (gcc:13)</option>
         <option value="java">Java</option>
         <option value="python">Python</option>
+        <option value="pascal">Pascal</option>
       </select>
     </div>
     <div class="form-group">
@@ -837,7 +840,7 @@ function verdictBadge(v) {
   return `<span class="badge badge-${cls}">${v}</span>`;
 }
 function langBadge(l) {
-  const map = {cpp:'blue',java:'yellow',python:'green'};
+  const map = {cpp:'blue',java:'yellow',python:'green',pascal:'purple'};
   return `<span class="badge badge-${map[l]||'gray'}">${l||'—'}</span>`;
 }
 function showFile(input, fnameId, zoneId) {
@@ -920,7 +923,7 @@ function parseTags(str) {
 }
 
 function getCheckedLangs(prefix) {
-  const all = ['cpp','java','python'];
+  const all = ['cpp','java','python','pascal'];
   const checked = all.filter(l => {
     const el = document.getElementById(prefix + '-' + l);
     return el && el.checked;
@@ -930,7 +933,7 @@ function getCheckedLangs(prefix) {
 
 function langBadges(langs) {
   if (!langs || langs.length === 0) return '<span style="color:#6b7280;font-size:11px">All</span>';
-  const colors = {cpp:'#3b82f6',java:'#f59e0b',python:'#10b981'};
+  const colors = {cpp:'#3b82f6',java:'#f59e0b',python:'#10b981',pascal:'#a855f7'};
   return langs.map(l => `<span style="background:${colors[l]||'#6b7280'};color:#fff;border-radius:4px;padding:1px 6px;font-size:11px;margin-right:2px">${l}</span>`).join('');
 }
 
@@ -966,7 +969,7 @@ async function createProblem() {
     document.getElementById('p-difficulty').value = '';
     clearMultiSelect('p-topics');
     clearMultiSelect('p-categories');
-    ['cpp','java','python'].forEach(l => { const el = document.getElementById('p-lang-'+l); if(el) el.checked = true; });
+    ['cpp','java','python','pascal'].forEach(l => { const el = document.getElementById('p-lang-'+l); if(el) el.checked = true; });
   } catch(e) { toast('Lỗi: ' + e.message, 'error'); }
   finally { btn.disabled = false; btn.textContent = 'Tạo'; }
 }
@@ -993,14 +996,14 @@ async function openEdit(id, slug, title, desc, time, mem, format, difficulty, ta
     populateMultiSelect('ep-topics', topics.map(t => ({id: t.id, label: t.name})), selTopicIds);
     populateMultiSelect('ep-categories', categories.map(c => ({id: c.id, label: c.name})), selCatIds);
     const allowedLangs = problem.allowedLanguages;
-    ['cpp','java','python'].forEach(l => {
+    ['cpp','java','python','pascal'].forEach(l => {
       const el = document.getElementById('ep-lang-' + l);
       if (el) el.checked = !allowedLangs || allowedLangs.includes(l);
     });
   } catch(e) {
     populateMultiSelect('ep-topics', [], []);
     populateMultiSelect('ep-categories', [], []);
-    ['cpp','java','python'].forEach(l => {
+    ['cpp','java','python','pascal'].forEach(l => {
       const el = document.getElementById('ep-lang-' + l);
       if (el) el.checked = true;
     });

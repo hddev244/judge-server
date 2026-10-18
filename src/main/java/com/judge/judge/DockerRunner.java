@@ -319,6 +319,7 @@ public class DockerRunner {
             case "cpp" -> "checker.cpp";
             case "java" -> "Checker.java";
             case "python" -> "checker.py";
+            case "pascal" -> "checker.pas";
             default -> throw new IllegalArgumentException("Unsupported checker language: " + language);
         };
     }
@@ -344,6 +345,7 @@ public class DockerRunner {
             case "cpp" -> "g++ -O2 -std=c++17 -o checker checker.cpp";
             case "java" -> "javac Checker.java";
             case "python" -> null;   // interpreted
+            case "pascal" -> "fpc -O2 -FE. checker.pas";
             default -> throw new IllegalArgumentException("Unsupported checker language: " + language);
         };
         if (compileCmd != null) {

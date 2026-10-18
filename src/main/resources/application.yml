@@ -62,6 +62,12 @@ judge:
       compile-cmd: ""
       run-cmd: "python3 solution.py"
       time-multiplier: 3.0
+    pascal:
+      image: ${JUDGE_LANG_PASCAL_IMAGE:judge-pascal:1}
+      source-file: solution.pas
+      compile-cmd: "fpc -O2 -FE. solution.pas"
+      run-cmd: "./solution"
+      time-multiplier: 1.5
 
 management:
   endpoints:

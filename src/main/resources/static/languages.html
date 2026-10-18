@@ -116,6 +116,7 @@ li strong{color:var(--text)}
     <a href="#ex-ruby"><span class="dot" style="background:#cc342d"></span>Ruby</a>
     <a href="#ex-php"><span class="dot" style="background:#777bb3"></span>PHP</a>
     <a href="#ex-kotlin"><span class="dot" style="background:#7f52ff"></span>Kotlin</a>
+    <a href="#ex-pascal"><span class="dot" style="background:#a855f7"></span>Pascal</a>
   </div>
   <div class="sidebar-section">
     <div class="sidebar-section-label">Liên kết</div>
@@ -264,6 +265,7 @@ li strong{color:var(--text)}
     cpp:      <span class="c"># ... giữ nguyên</span>
     java:     <span class="c"># ... giữ nguyên</span>
     python:   <span class="c"># ... giữ nguyên</span>
+    pascal:   <span class="c"># ... giữ nguyên</span>
 <span class="hl">    go:
       image: golang:1.22-alpine
       source-file: solution.go
@@ -332,6 +334,7 @@ docker compose up -d judge-api</pre>
       <a href="#ex-ruby" class="lang-card"><div class="lang-icon">💎</div>Ruby</a>
       <a href="#ex-php" class="lang-card"><div class="lang-icon">🐘</div>PHP</a>
       <a href="#ex-kotlin" class="lang-card"><div class="lang-icon">🟣</div>Kotlin</a>
+      <a href="#ex-pascal" class="lang-card"><div class="lang-icon">📜</div>Pascal</a>
     </div>
 
     <!-- Go -->
@@ -487,6 +490,38 @@ docker compose up -d judge-api</pre>
       <div class="alert warn">⚠️ Kotlin compile rất chậm (~20–30s). Tăng compile timeout nếu cần.</div>
     </div>
 
+    <!-- Pascal -->
+    <div id="ex-pascal" style="margin-bottom:40px">
+      <div class="section-sub">📜 Pascal (Free Pascal / FPC)</div>
+      <table>
+        <tr><th>Field</th><th>Giá trị</th><th>Lý do</th></tr>
+        <tr><td><code>image</code></td><td><code>judge-pascal:1</code> (hoặc <code>debian:bookworm-slim</code>)</td><td>Free Pascal Compiler 3.2.2</td></tr>
+        <tr><td><code>source-file</code></td><td><code>solution.pas</code></td><td>Đuôi <code>.pas</code> chuẩn Pascal</td></tr>
+        <tr><td><code>compile-cmd</code></td><td><code>fpc -O2 -FE. solution.pas</code></td><td>Biên dịch với mức tối ưu <code>-O2</code></td></tr>
+        <tr><td><code>run-cmd</code></td><td><code>./solution</code></td><td>Chạy binary</td></tr>
+        <tr><td><code>time-multiplier</code></td><td><code>1.5</code></td><td>Hệ số nhân thời gian</td></tr>
+      </table>
+      <div class="code-block">
+        <div class="code-header"><span>application.yml</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre>    pascal:
+      image: <span class="s">judge-pascal:1</span>
+      source-file: <span class="s">solution.pas</span>
+      compile-cmd: <span class="s">"fpc -O2 -FE. solution.pas"</span>
+      run-cmd: <span class="s">"./solution"</span>
+      time-multiplier: <span class="n">1.5</span></pre>
+      </div>
+      <div class="code-block">
+        <div class="code-header"><span>Mẫu code A+B — Pascal</span></div>
+        <pre><span class="k">program</span> AddTwoNumbers;
+<span class="k">var</span>
+    a, b: LongInt;
+<span class="k">begin</span>
+    Read(a, b);
+    WriteLn(a + b);
+<span class="k">end</span>.</pre>
+      </div>
+    </div>
+
     <!-- Quick reference -->
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px 24px">
       <div style="font-size:14px;font-weight:700;margin-bottom:14px">Bảng tổng hợp nhanh</div>
@@ -496,6 +531,7 @@ docker compose up -d judge-api</pre>
         <tr><td><code>c</code></td><td><code>gcc:13</code></td><td><code>gcc -O2 -o solution solution.c -lm</code></td><td><code>./solution</code></td></tr>
         <tr><td><code>java</code></td><td><code>eclipse-temurin:21</code></td><td><code>javac -encoding UTF-8 Solution.java</code></td><td><code>java -Xmx{mem}m -cp /code Solution</code></td></tr>
         <tr><td><code>python</code></td><td><code>python:3.12-slim</code></td><td>—</td><td><code>python3 solution.py</code></td></tr>
+        <tr><td><code>pascal</code></td><td><code>debian:bookworm-slim</code> / <code>judge-pascal:1</code></td><td><code>fpc -O2 -FE. solution.pas</code></td><td><code>./solution</code></td></tr>
         <tr><td><code>go</code></td><td><code>golang:1.22-alpine</code></td><td><code>go build -o solution solution.go</code></td><td><code>./solution</code></td></tr>
         <tr><td><code>rust</code></td><td><code>rust:1.77-slim</code></td><td><code>rustc -O -o solution solution.rs</code></td><td><code>./solution</code></td></tr>
         <tr><td><code>nodejs</code></td><td><code>node:20-alpine</code></td><td>—</td><td><code>node --max-old-space-size={mem} solution.js</code></td></tr>

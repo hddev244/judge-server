@@ -168,6 +168,7 @@ textarea#code{width:100%;height:100%;background:var(--bg);border:none;outline:no
           <option value="cpp">C++ (gcc:13)</option>
           <option value="java">Java 21</option>
           <option value="python">Python 3.12</option>
+          <option value="pascal">Pascal (FPC 3.2)</option>
         </select>
         <button class="btn btn-clear btn-sm" onclick="clearCode()" style="padding:5px 10px;font-size:12px">🗑 Xóa</button>
         <div style="flex:1"></div>
@@ -318,7 +319,12 @@ def main():
     # TODO: viết code ở đây
     pass
 
-main()`
+main()`,
+  pascal: `program Solution;
+
+begin
+    // TODO: viết code ở đây
+end.`
 };
 
 function setDefaultTemplate(lang) {

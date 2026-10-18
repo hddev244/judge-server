@@ -9,7 +9,7 @@ public class TestRunRequest {
     private Long problemId;
 
     @NotBlank
-    @Pattern(regexp = "cpp|java|python", message = "language must be cpp, java, or python")
+    @Pattern(regexp = "cpp|java|python|pascal", message = "language must be cpp, java, python, or pascal")
     private String language;
 
     @NotBlank
