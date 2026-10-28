@@ -2,6 +2,8 @@ package com.judge.judge;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 class DockerRunnerParseTest {
@@ -54,5 +56,41 @@ class DockerRunnerParseTest {
         assertEquals("/data/problems/194/cases/1.in",
                 DockerRunner.resolveContainerPath("/data/problems/194/cases/1.in", "/tmp/judge/job123"));
         assertEquals("", DockerRunner.resolveContainerPath(null, "/tmp/judge/job123"));
+    }
+
+    @Test
+    void inputMounts_mountsEachStoredInputAloneNeverTheTestcaseDir() {
+        var mounts = DockerRunner.inputMounts(List.of(
+                new DockerRunner.BatchTestCase(41L, "/data/problems/7/cases/41.in"),
+                new DockerRunner.BatchTestCase(42L, "/data/problems/7/cases/42.in")),
+                "/tmp/judge/job123");
+
+        assertEquals("/tests/41.in", mounts.containerPaths().get(41L));
+        assertEquals("/tests/42.in", mounts.containerPaths().get(42L));
+        // The expected outputs live next to the inputs; only the input files themselves are mounted.
+        assertEquals(List.of(
+                "-v", "/data/problems/7/cases/41.in:/tests/41.in:ro",
+                "-v", "/data/problems/7/cases/42.in:/tests/42.in:ro"), mounts.volumeArgs());
+    }
+
+    @Test
+    void inputMounts_customInputInsideWorkDirUsesCodeMount() {
+        var mounts = DockerRunner.inputMounts(List.of(
+                new DockerRunner.BatchTestCase(1L, "/tmp/judge/job123/custom.in"),
+                new DockerRunner.BatchTestCase(2L, "")),
+                "/tmp/judge/job123");
+
+        assertEquals("/code/custom.in", mounts.containerPaths().get(1L));
+        assertEquals("/dev/null", mounts.containerPaths().get(2L));
+        assertTrue(mounts.volumeArgs().isEmpty());
+    }
+
+    @Test
+    void inputMounts_siblingJobDirIsNotTreatedAsWorkDir() {
+        var mounts = DockerRunner.inputMounts(List.of(
+                new DockerRunner.BatchTestCase(1L, "/tmp/judge/job1234/custom.in")),
+                "/tmp/judge/job123");
+
+        assertEquals("/tests/1.in", mounts.containerPaths().get(1L));
     }
 }

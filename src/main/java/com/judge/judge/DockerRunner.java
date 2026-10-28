@@ -132,11 +132,16 @@ public class DockerRunner {
             ));
         }
 
+        InputMounts inputs = inputMounts(testCases, workDir);
         for (BatchTestCase tc : testCases) {
-            String containerInput = resolveContainerPath(tc.inputPath(), workDir);
+            String containerInput = inputs.containerPaths().get(tc.id());
+            // `kill -9 -1` (from PID 1, which it spares) reaps anything the solution
+            // left running, so a detached child can't keep computing outside the
+            // time limit or rewrite /metrics after its case was measured.
             script.append(String.format(
                     "/usr/bin/time -q -f '%%e %%U %%S %%M %%x' -o /metrics/%d.time timeout %s /bin/sh -c '%s < \"%s\" > /metrics/%d.out 2> /metrics/%d.err'\n" +
                     "EC=$?\n" +
+                    "kill -9 -1 2>/dev/null\n" +
                     "echo $EC > /metrics/%d.exit\n",
                     tc.id(), fmt(wallSecs), runCmd, containerInput, tc.id(), tc.id(), tc.id()
             ));
@@ -166,8 +171,10 @@ public class DockerRunner {
                 "--cpus", fmt(judgeConfig.getSandboxCpus()),
                 "--pids-limit", "64",
                 "-v", workDir + ":/code" + (compileCmd != null && !compileCmd.isBlank() ? ":rw" : ":ro"),
-                "-v", metricsDir.toString() + ":/metrics",
-                "-v", judgeConfig.getTestcaseBasePath() + ":" + judgeConfig.getTestcaseBasePath() + ":ro",
+                "-v", metricsDir.toString() + ":/metrics"
+        ));
+        cmd.addAll(inputs.volumeArgs());
+        cmd.addAll(List.of(
                 "-w", "/code",
                 lang.getImage(),
                 "/bin/sh", "/code/batch_run.sh"
@@ -255,6 +262,33 @@ public class DockerRunner {
             }
             return new BatchRunResult(true, null, false, results);
         }
+    }
+
+    /** Where each case's input appears inside the sandbox, plus the docker args that put it there. */
+    record InputMounts(Map<Long, String> containerPaths, List<String> volumeArgs) {}
+
+    /**
+     * Mounts each stored input file on its own at /tests/{id}.in. The testcase
+     * store is never mounted as a directory: it also holds every expected output
+     * (and other problems' data), which the solution could otherwise just read.
+     */
+    static InputMounts inputMounts(List<BatchTestCase> testCases, String workDir) {
+        Map<Long, String> paths = new HashMap<>();
+        List<String> args = new ArrayList<>();
+        for (BatchTestCase tc : testCases) {
+            String hostPath = tc.inputPath();
+            if (hostPath == null || hostPath.isBlank()) {
+                paths.put(tc.id(), "/dev/null");
+            } else if (Path.of(hostPath).startsWith(Path.of(workDir))) {
+                paths.put(tc.id(), resolveContainerPath(hostPath, workDir));
+            } else {
+                String target = "/tests/" + tc.id() + ".in";
+                args.add("-v");
+                args.add(hostPath + ":" + target + ":ro");
+                paths.put(tc.id(), target);
+            }
+        }
+        return new InputMounts(paths, args);
     }
 
     static String resolveContainerPath(String hostPath, String workDir) {
@@ -415,10 +449,11 @@ public class DockerRunner {
 
     /**
      * Interactive judging: the solution and a compiled interactor talk over two
-     * FIFOs inside one hardened container. The interactor is passed the input and
-     * expected-answer files and its exit code is the verdict (0 AC / 1 WA /
-     * 7 partial with the ratio in /metrics/score.txt). Solution TLE/MLE/RE take
-     * precedence over the interactor's verdict.
+     * FIFOs. They run in separate containers sharing only the FIFO directory, so
+     * the solution can never read the interactor's input/answer files or binary,
+     * nor forge its verdict files. The interactor's exit code is the verdict
+     * (0 AC / 1 WA / 7 partial with the ratio in /metrics/score.txt). Solution
+     * TLE/MLE/RE take precedence over the interactor's verdict.
      */
     public InteractiveResult runInteractive(String workDir, String language,
                                             String checkerDirPath, String checkerLanguage,
@@ -435,10 +470,22 @@ public class DockerRunner {
         Path checkerDir = Path.of(checkerDirPath);
         if (!Files.isDirectory(checkerDir)) checkerDir = checkerDir.getParent();
         Path metricsDir = Path.of(workDir, "metrics");
+        String runId = UUID.randomUUID().toString().substring(0, 8);
+        // Owned by the (root) API process and not world-writable: the sandbox user
+        // can open the FIFOs but not delete or swap them.
+        Path ipcDir = Path.of(workDir, "ipc-" + runId);
+        Path interactorMetricsDir = Path.of(workDir, "imetrics-" + runId);
         try {
             Files.createDirectories(metricsDir);
             makeWritableByAll(metricsDir);
+            Files.deleteIfExists(metricsDir.resolve("run.txt"));
+            Files.createDirectories(interactorMetricsDir);
+            makeWritableByAll(interactorMetricsDir);
+            Files.createDirectories(ipcDir);
+            makeFifo(ipcDir.resolve("s2i"));
+            makeFifo(ipcDir.resolve("i2s"));
         } catch (IOException e) {
+            log.error("Cannot prepare interactive run, workDir={}", workDir, e);
             return new InteractiveResult("SE", 0, 0, 0, true);
         }
 
@@ -448,15 +495,32 @@ public class DockerRunner {
             case "python" -> "python3 /checker/checker.py /input.txt /answer.txt";
             default -> "/checker/checker /input.txt /answer.txt";
         };
-        // FIFO open order matters: both the interactor and the solution must first
-        // rendezvous on i2s (interactor opens it for WRITE, solution for READ) or the
-        // two O_RDONLY opens deadlock. Hence interactor lists `> i2s` before `< s2i`.
-        String inner = String.join("\n",
-                "mkfifo /tmp/s2i /tmp/i2s",
-                interactorCmd + " > /tmp/i2s < /tmp/s2i & IPID=$!",
+        // FIFO open order matters: both sides must first rendezvous on i2s
+        // (interactor opens it for WRITE, solution for READ) or the two O_RDONLY
+        // opens deadlock. The redirections sit inside `timeout` so a side whose
+        // peer never starts gives up instead of blocking in open() forever.
+        String interactorScript =
+                "timeout " + fmt(wallSecs + 2.0) + " /bin/sh -c '" + interactorCmd
+                        + " > /ipc/i2s < /ipc/s2i'; echo $? > /metrics/interactor_exit.txt";
+        String solutionScript =
                 "timeout " + fmt(wallSecs) + " /usr/bin/time -q -f '%e %U %S %M %x' -o /metrics/run.txt"
-                        + " /bin/sh -c '" + runCmd + "' < /tmp/i2s > /tmp/s2i 2> /metrics/err.txt",
-                "wait $IPID; echo $? > /metrics/interactor_exit.txt");
+                        + " /bin/sh -c '" + runCmd + " < /ipc/i2s > /ipc/s2i 2> /metrics/err.txt'";
+
+        List<String> interactorCmdLine = new ArrayList<>(List.of("docker", "run", "--rm"));
+        interactorCmdLine.addAll(baseSandboxFlags());
+        interactorCmdLine.addAll(List.of(
+                "--memory", "256m",
+                "--memory-swap", "256m",
+                "--cpus", fmt(judgeConfig.getSandboxCpus()),
+                "--pids-limit", "64",
+                "-v", checkerDir.toString() + ":/checker:ro",
+                "-v", interactorMetricsDir.toString() + ":/metrics",
+                "-v", ipcDir.toString() + ":/ipc:ro",
+                "-v", inputPath + ":/input.txt:ro",
+                "-v", answerPath + ":/answer.txt:ro",
+                checkerImage(clang),
+                "/bin/sh", "-c", interactorScript
+        ));
 
         List<String> cmd = new ArrayList<>(List.of("docker", "run", "--rm"));
         cmd.addAll(baseSandboxFlags());
@@ -467,18 +531,18 @@ public class DockerRunner {
                 "--pids-limit", "64",
                 "--ulimit", "cpu=" + cpuSecs + ":" + cpuSecs,
                 "-v", workDir + ":/code:ro",
-                "-v", checkerDir.toString() + ":/checker:ro",
                 "-v", metricsDir.toString() + ":/metrics",
-                "-v", inputPath + ":/input.txt:ro",
-                "-v", answerPath + ":/answer.txt:ro",
+                "-v", ipcDir.toString() + ":/ipc:ro",
                 "-w", "/code",
                 lang.getImage(),
-                "/bin/sh", "-c", inner
+                "/bin/sh", "-c", solutionScript
         ));
 
         try {
-            ProcessResult result = runProcess(cmd, effectiveLimitMs + 5000L);
-            if (isDockerDaemonError(result.stderr())) {
+            RunningProcess interactor = startProcess(interactorCmdLine);
+            ProcessResult result = awaitProcess(startProcess(cmd), effectiveLimitMs + 5000L);
+            ProcessResult interactorResult = awaitProcess(interactor, effectiveLimitMs + 5000L);
+            if (isDockerDaemonError(result.stderr()) || isDockerDaemonError(interactorResult.stderr())) {
                 return new InteractiveResult("SE", 0, 0, 0, true);
             }
             RunMetrics m = parseMetrics(readMetricsFile(metricsDir, "run.txt"));
@@ -497,7 +561,7 @@ public class DockerRunner {
             // The interactor's verdict is authoritative: once it decides WA/PC it
             // closes the pipe, so the solution hitting EOF and exiting non-zero is
             // expected, not a genuine RE.
-            int interactorExit = parseIntSafe(readMetricsFile(metricsDir, "interactor_exit.txt"), -1);
+            int interactorExit = parseIntSafe(readMetricsFile(interactorMetricsDir, "interactor_exit.txt"), -1);
             int solExit = m != null ? m.exitStatus() : result.exitCode();
             return switch (interactorExit) {
                 case 0 -> solExit != 0
@@ -505,7 +569,7 @@ public class DockerRunner {
                         : new InteractiveResult("AC", 1.0, cpuMs, memKb, false);
                 case 1 -> new InteractiveResult("WA", 0.0, cpuMs, memKb, false);
                 case 7 -> {
-                    double ratio = parseRatio(readMetricsFile(metricsDir, "score.txt"));
+                    double ratio = parseRatio(readMetricsFile(interactorMetricsDir, "score.txt"));
                     yield new InteractiveResult(ratio >= 1.0 ? "AC" : "PC", Math.max(0, Math.min(1, ratio)),
                             cpuMs, memKb, false);
                 }
@@ -514,6 +578,28 @@ public class DockerRunner {
         } catch (IOException e) {
             log.error("Interactive run failed, workDir={}", workDir, e);
             return new InteractiveResult("SE", 0, 0, 0, true);
+        } finally {
+            try {
+                deleteRecursively(ipcDir);
+                deleteRecursively(interactorMetricsDir);
+            } catch (IOException e) {
+                log.warn("Failed to remove interactive scratch dirs in {}", workDir, e);
+            }
+        }
+    }
+
+    /** World read/writable FIFO (the sandbox runs as another uid) inside a dir it cannot modify. */
+    private static void makeFifo(Path path) throws IOException {
+        Process p = new ProcessBuilder("mkfifo", "-m", "0666", path.toString())
+                .redirectErrorStream(true).start();
+        try {
+            if (!p.waitFor(5, TimeUnit.SECONDS) || p.exitValue() != 0) {
+                p.destroyForcibly();
+                throw new IOException("mkfifo failed for " + path);
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException("interrupted creating " + path, e);
         }
     }
 
@@ -581,6 +667,13 @@ public class DockerRunner {
     }
 
     private ProcessResult runProcess(List<String> cmd, long timeoutMs) throws IOException {
+        return awaitProcess(startProcess(cmd), timeoutMs);
+    }
+
+    private record RunningProcess(Process process, StringBuilder stdout, StringBuilder stderr,
+                                  Thread outReader, Thread errReader) {}
+
+    private RunningProcess startProcess(List<String> cmd) throws IOException {
         Process process = new ProcessBuilder(cmd)
                 .redirectErrorStream(false)
                 .start();
@@ -595,6 +688,15 @@ public class DockerRunner {
         Thread errReader = new Thread(() -> readBounded(process.getErrorStream(), stderr, cap));
         outReader.start();
         errReader.start();
+        return new RunningProcess(process, stdout, stderr, outReader, errReader);
+    }
+
+    private ProcessResult awaitProcess(RunningProcess running, long timeoutMs) {
+        Process process = running.process();
+        StringBuilder stdout = running.stdout();
+        StringBuilder stderr = running.stderr();
+        Thread outReader = running.outReader();
+        Thread errReader = running.errReader();
 
         boolean finished;
         try {
