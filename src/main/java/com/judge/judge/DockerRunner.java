@@ -90,6 +90,16 @@ public class DockerRunner {
                                               List<BatchTestCase> testCases,
                                               int timeLimitMs, int memoryKb,
                                               boolean stopOnFail) {
+        return runBatchWithCompile(workDir, language, compileCmd, testCases, timeLimitMs, memoryKb,
+                stopOnFail, FileIo.Spec.NONE);
+    }
+
+    public BatchRunResult runBatchWithCompile(String workDir, String language,
+                                              String compileCmd,
+                                              List<BatchTestCase> testCases,
+                                              int timeLimitMs, int memoryKb,
+                                              boolean stopOnFail, FileIo.Spec io) {
+        if (io == null) io = FileIo.Spec.NONE;
         if (testCases == null || testCases.isEmpty()) {
             return new BatchRunResult(true, null, false, Collections.emptyMap());
         }
@@ -104,9 +114,16 @@ public class DockerRunner {
         String runCmd = lang.getRunCmd().replace("{mem}", String.valueOf(memMb));
 
         Path metricsDir = Path.of(workDir, "metrics");
+        // File-I/O cases run in /box/{id}: a host-disk dir (not tmpfs, which would count against
+        // the container's memory limit) that stays writable even when /code is mounted read-only.
+        Path boxDir = Path.of(workDir, "box");
         try {
             Files.createDirectories(metricsDir);
             makeWritableByAll(metricsDir);
+            if (io.isFile()) {
+                Files.createDirectories(boxDir);
+                makeWritableByAll(boxDir);
+            }
         } catch (IOException e) {
             log.error("Cannot create metrics dir: {}", metricsDir, e);
             Map<Long, RunResult> errMap = new HashMap<>();
@@ -133,8 +150,16 @@ public class DockerRunner {
         }
 
         InputMounts inputs = inputMounts(testCases, workDir);
+        String fileRunCmd = io.isFile() ? FileIo.absoluteRunCmd(runCmd, lang.getSourceFile()) : null;
         for (BatchTestCase tc : testCases) {
             String containerInput = inputs.containerPaths().get(tc.id());
+            if (io.isFile()) {
+                script.append(FileIo.batchCaseScript(io, tc.id(), containerInput, fmt(wallSecs), fileRunCmd));
+                if (stopOnFail) {
+                    script.append("if [ \"$EC\" -ne 0 ]; then exit 0; fi\n");
+                }
+                continue;
+            }
             // `kill -9 -1` (from PID 1, which it spares) reaps anything the solution
             // left running, so a detached child can't keep computing outside the
             // time limit or rewrite /metrics after its case was measured.
@@ -174,6 +199,9 @@ public class DockerRunner {
                 "-v", metricsDir.toString() + ":/metrics"
         ));
         cmd.addAll(inputs.volumeArgs());
+        if (io.isFile()) {
+            cmd.addAll(List.of("-v", boxDir + ":/box"));
+        }
         cmd.addAll(List.of(
                 "-w", "/code",
                 lang.getImage(),
@@ -243,6 +271,19 @@ public class DockerRunner {
                 }
 
                 int childExit = m != null ? m.exitStatus() : rawExit;
+                if (childExit == 0 && Files.exists(metricsDir.resolve(tc.id() + ".nofile"))) {
+                    results.put(tc.id(), RunResult.builder()
+                            .stdout("")
+                            .stderr("Output file " + io.outputFile() + " was not created"
+                                    + (errStr.isEmpty() ? "" : "\n" + errStr))
+                            .outputFileMissing(true)
+                            .exitCode(0)
+                            .timeMs(cpuMs)
+                            .wallTimeMs(m != null ? m.wallTimeMs() : 0)
+                            .memoryKb(memKb)
+                            .build());
+                    continue;
+                }
                 results.put(tc.id(), RunResult.builder()
                         .stdout(outStr)
                         .stderr(errStr.isEmpty() ? (childExit != 0 ? "Process exited with code " + childExit : "") : errStr)

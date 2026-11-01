@@ -21,7 +21,8 @@ public record JudgeJob(
         Double floatEpsilon,
         String judgingMode,
         List<TestCaseView> testCases,
-        List<SubtaskView> subtasks
+        List<SubtaskView> subtasks,
+        FileIo.Spec fileIo
 ) {
     public record TestCaseView(
             Long id, String inputPath, String outputPath,

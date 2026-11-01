@@ -3,6 +3,7 @@ package com.judge.service;
 import com.judge.api.dto.*;
 import com.judge.domain.*;
 import com.judge.exception.JudgeException;
+import com.judge.judge.FileIo;
 import com.judge.judge.DockerRunner;
 import com.judge.repository.*;
 import org.springframework.beans.factory.annotation.Value;
@@ -68,6 +69,8 @@ public class ProblemService {
                 .judgingMode(req.getJudgingMode() != null ? req.getJudgingMode() : "ALL")
                 .status("PRIVATE")
                 .build();
+        FileIo.apply(problem, FileIo.normalize(req.getIoMode(), req.getInputFile(), req.getOutputFile(),
+                problem.getCheckerType()));
         problem = problemRepository.save(problem);
         List<String> tags = saveTags(problem, req.getTags());
         syncTopics(problem, req.getTopicIds());
@@ -88,6 +91,10 @@ public class ProblemService {
         if (req.getComparisonMode() != null) problem.setComparisonMode(req.getComparisonMode());
         problem.setFloatEpsilon(req.getFloatEpsilon());
         if (req.getJudgingMode() != null) problem.setJudgingMode(req.getJudgingMode());
+        if (req.getIoMode() != null) {
+            FileIo.apply(problem, FileIo.normalize(req.getIoMode(), req.getInputFile(), req.getOutputFile(),
+                    problem.getCheckerType()));
+        }
         problem = problemRepository.save(problem);
         problemTagRepository.deleteByProblemId(id);
         List<String> tags = saveTags(problem, req.getTags());
@@ -377,6 +384,9 @@ public class ProblemService {
                                          String sourceCode) throws IOException {
         Problem problem = getOrThrow(problemId);
         String checkerType = "INTERACTIVE".equalsIgnoreCase(type) ? "INTERACTIVE" : "CUSTOM";
+        if ("INTERACTIVE".equals(checkerType) && FileIo.of(problem).isFile()) {
+            throw JudgeException.badRequest("Interactive problems cannot use file I/O");
+        }
         // Interactor and standard checker share the compile pipeline (both produce
         // /checker/checker); only the calling convention at judge time differs.
         String binPath = dockerRunner.compileChecker(language, sourceCode, problemId);

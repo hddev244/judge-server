@@ -18,6 +18,8 @@ public class RunResult {
     private final boolean timedOut;
     private final boolean memoryExceeded;
     private final boolean systemError;
+    /** File-I/O problem whose solution exited normally without creating the output file. */
+    private final boolean outputFileMissing;
 
     public static RunResult tle(long timeMs) {
         return RunResult.builder()

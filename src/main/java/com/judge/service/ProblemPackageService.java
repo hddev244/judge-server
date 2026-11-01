@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.judge.api.dto.ManagedProblemResponse;
 import com.judge.api.dto.ProblemPackage;
 import com.judge.domain.ApiKey;
+import com.judge.judge.FileIo;
 import com.judge.domain.Problem;
 import com.judge.domain.ProblemTag;
 import com.judge.domain.Subtask;
@@ -93,6 +94,7 @@ public class ProblemPackageService {
                     tc.getSubtask() != null ? "st" + tc.getSubtask().getId() : null));
         }
 
+        FileIo.Spec io = FileIo.of(p);
         ProblemPackage.Checker checker = null;
         if (("CUSTOM".equals(p.getCheckerType()) || "INTERACTIVE".equals(p.getCheckerType()))
                 && p.getCheckerSource() != null) {
@@ -106,7 +108,8 @@ public class ProblemPackageService {
                 p.getTitle(), p.getDescription(), p.getDescriptionFormat(),
                 p.getTimeLimitMs(), p.getMemoryLimitKb(), p.getDifficulty(), tags,
                 p.getComparisonMode(), p.getFloatEpsilon(), p.getJudgingMode(), p.getAllowedLanguages(),
-                checker, subtaskSpecs, tcSpecs);
+                checker, subtaskSpecs, tcSpecs,
+                io.isFile() ? io.mode() : null, io.inputFile(), io.outputFile());
     }
 
     // ── Grader (replica judge) ───────────────────────────────────────────────
@@ -156,6 +159,8 @@ public class ProblemPackageService {
         problem.setCheckerSource(null);
         problem.setCheckerBinPath(null);
         problem.setPackageHash(null);
+        FileIo.apply(problem, FileIo.normalize(pkg.ioMode(), pkg.inputFile(), pkg.outputFile(),
+                pkg.checker() != null ? pkg.checker().type() : null));
         problem = problemRepository.save(problem);
 
         problemService.saveTags(problem, pkg.tags());

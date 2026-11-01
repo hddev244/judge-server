@@ -44,4 +44,14 @@ public class ProblemRequest {
     @Pattern(regexp = "ALL|STOP_ON_FIRST_FAIL|SUBTASK_SKIP",
             message = "judgingMode must be ALL, STOP_ON_FIRST_FAIL or SUBTASK_SKIP")
     private String judgingMode = "ALL";
+
+    /** STDIO | FILE | FILE_OR_STDIO. Null on update keeps the current setting. */
+    @Pattern(regexp = "STDIO|FILE|FILE_OR_STDIO", message = "ioMode must be STDIO, FILE or FILE_OR_STDIO")
+    private String ioMode;
+
+    /** e.g. BAI1.INP — required when ioMode is FILE or FILE_OR_STDIO. */
+    private String inputFile;
+
+    /** e.g. BAI1.OUT — required when ioMode is FILE or FILE_OR_STDIO. */
+    private String outputFile;
 }

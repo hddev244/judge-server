@@ -177,7 +177,7 @@ public class JudgeService {
 
                 DockerRunner.BatchRunResult batchOutput = dockerRunner.runBatchWithCompile(
                         workDir.toString(), job.language(), lang.getCompileCmd(),
-                        batchCases, job.timeLimitMs(), job.memoryLimitKb(), stopOnFail);
+                        batchCases, job.timeLimitMs(), job.memoryLimitKb(), stopOnFail, job.fileIo());
 
                 if (!batchOutput.compileSuccess()) {
                     String verdict = batchOutput.systemError() ? "SE" : "CE";
@@ -298,7 +298,7 @@ public class JudgeService {
                 DockerRunner.BatchRunResult batchOutput = dockerRunner.runBatchWithCompile(
                         workDir.toString(), req.getLanguage(), lang.getCompileCmd(),
                         List.of(new DockerRunner.BatchTestCase(1L, in.toString())),
-                        problem.getTimeLimitMs(), problem.getMemoryLimitKb(), false);
+                        problem.getTimeLimitMs(), problem.getMemoryLimitKb(), false, FileIo.of(problem));
 
                 if (!batchOutput.compileSuccess()) {
                     return SubmissionResponse.builder()
@@ -388,7 +388,7 @@ public class JudgeService {
 
                 DockerRunner.BatchRunResult batchOutput = dockerRunner.runBatchWithCompile(
                         workDir.toString(), req.getLanguage(), lang.getCompileCmd(),
-                        batchCases, problem.getTimeLimitMs(), problem.getMemoryLimitKb(), false);
+                        batchCases, problem.getTimeLimitMs(), problem.getMemoryLimitKb(), false, FileIo.of(problem));
 
                 if (!batchOutput.compileSuccess()) {
                     return SubmissionResponse.builder()
@@ -485,6 +485,7 @@ public class JudgeService {
         if (rr.isTimedOut())       return CaseOutcome.of("TLE");
         if (rr.isMemoryExceeded()) return CaseOutcome.of("MLE");
         if (rr.getExitCode() != 0) return CaseOutcome.of("RE");
+        if (rr.isOutputFileMissing()) return CaseOutcome.of("WA");
 
         if ("CUSTOM".equals(checkerType) && checkerBinPath != null) {
             try {

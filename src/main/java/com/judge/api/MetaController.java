@@ -23,7 +23,7 @@ public class MetaController {
     public static final int API_VERSION = 2;
 
     static final List<String> CAPABILITIES = List.of(
-            "GRADER_ROLE", "PACKAGE_EXPORT", "PACKAGE_UPSERT", "WEBHOOK_SECRET");
+            "GRADER_ROLE", "PACKAGE_EXPORT", "PACKAGE_UPSERT", "WEBHOOK_SECRET", "FILE_IO");
 
     private final JudgeConfig judgeConfig;
     private final WebhookSender webhookSender;

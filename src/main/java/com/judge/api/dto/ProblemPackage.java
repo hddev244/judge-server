@@ -1,5 +1,6 @@
 package com.judge.api.dto;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 
@@ -10,6 +11,9 @@ import java.util.List;
  * modes, checker, subtasks and every test case (with its own score). Exported by an admin key on
  * the source judge and applied verbatim by a GRADER key on a replica, so both judges grade the
  * same submission identically. Unlike the ZIP import, per-test scores are preserved.
+ *
+ * <p>The file I/O fields are omitted when null (STDIO), so packages of ordinary problems keep the
+ * exact JSON — and therefore hash — they had before file I/O existed.
  */
 public record ProblemPackage(
         @NotBlank @Size(max = 255) String title,
@@ -25,8 +29,23 @@ public record ProblemPackage(
         @Size(max = 100) String allowedLanguages,
         @Valid Checker checker,
         @Valid List<SubtaskSpec> subtasks,
-        @NotEmpty @Valid List<TestCaseSpec> testCases
+        @NotEmpty @Valid List<TestCaseSpec> testCases,
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        @Pattern(regexp = "STDIO|FILE|FILE_OR_STDIO") String ioMode,
+        @JsonInclude(JsonInclude.Include.NON_NULL) String inputFile,
+        @JsonInclude(JsonInclude.Include.NON_NULL) String outputFile
 ) {
+
+    /** Stdin/stdout package (no file I/O). */
+    public ProblemPackage(String title, String description, String descriptionFormat,
+                          int timeLimitMs, int memoryLimitKb, String difficulty, List<String> tags,
+                          String comparisonMode, Double floatEpsilon, String judgingMode,
+                          String allowedLanguages, Checker checker, List<SubtaskSpec> subtasks,
+                          List<TestCaseSpec> testCases) {
+        this(title, description, descriptionFormat, timeLimitMs, memoryLimitKb, difficulty, tags,
+                comparisonMode, floatEpsilon, judgingMode, allowedLanguages, checker, subtasks,
+                testCases, null, null, null);
+    }
 
     public record Checker(
             @Pattern(regexp = "CUSTOM|INTERACTIVE") String type,

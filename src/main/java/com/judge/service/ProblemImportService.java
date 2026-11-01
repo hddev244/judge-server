@@ -6,6 +6,7 @@ import com.judge.domain.Subtask;
 import com.judge.domain.TestCase;
 import com.judge.exception.JudgeException;
 import com.judge.judge.DockerRunner;
+import com.judge.judge.FileIo;
 import com.judge.repository.ProblemRepository;
 import com.judge.repository.ProblemTagRepository;
 import com.judge.repository.SubtaskRepository;
@@ -94,6 +95,11 @@ public class ProblemImportService {
                 .difficulty(difficulty)
                 .status("PRIVATE")
                 .build();
+        FileIo.apply(problem, FileIo.normalize(
+                firstString(meta, "io_mode", "ioMode"),
+                firstString(meta, "input_file", "inputFile"),
+                firstString(meta, "output_file", "outputFile"),
+                null));
         problem = problemRepository.save(problem);
 
         // tags
@@ -210,6 +216,14 @@ public class ProblemImportService {
             if (!stripped.isEmpty()) return stripped;
         }
         return name;
+    }
+
+    private String firstString(Map<String, Object> map, String... keys) {
+        for (String key : keys) {
+            String v = getString(map, key);
+            if (v != null) return v;
+        }
+        return null;
     }
 
     private String getString(Map<String, Object> map, String key) {

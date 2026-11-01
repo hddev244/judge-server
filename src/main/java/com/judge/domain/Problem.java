@@ -82,6 +82,19 @@ public class Problem {
     @Builder.Default
     private String judgingMode = "ALL";
 
+    /** STDIO (default) | FILE | FILE_OR_STDIO — see {@link com.judge.judge.FileIo}. */
+    @Column(name = "io_mode", nullable = false, length = 16)
+    @Builder.Default
+    private String ioMode = "STDIO";
+
+    /** File the solution reads in FILE modes, e.g. BAI1.INP; null for STDIO. */
+    @Column(name = "input_file", length = 64)
+    private String inputFile;
+
+    /** File the solution writes in FILE modes, e.g. BAI1.OUT; null for STDIO. */
+    @Column(name = "output_file", length = 64)
+    private String outputFile;
+
     /** Comma-separated language keys, e.g. "cpp,java". NULL = all allowed. */
     @Column(name = "allowed_languages", length = 100)
     private String allowedLanguages;

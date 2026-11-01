@@ -36,6 +36,10 @@ public class ProblemResponse {
     private String comparisonMode;
     private Double floatEpsilon;
     private String judgingMode;
+    /** STDIO | FILE | FILE_OR_STDIO; file names are null for STDIO. */
+    private String ioMode;
+    private String inputFile;
+    private String outputFile;
     private List<String> allowedLanguages;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
@@ -101,6 +105,9 @@ public class ProblemResponse {
                 .comparisonMode(p.getComparisonMode())
                 .floatEpsilon(p.getFloatEpsilon())
                 .judgingMode(p.getJudgingMode())
+                .ioMode(p.getIoMode() != null ? p.getIoMode() : "STDIO")
+                .inputFile(p.getInputFile())
+                .outputFile(p.getOutputFile())
                 .allowedLanguages(p.getAllowedLanguages() != null && !p.getAllowedLanguages().isBlank()
                         ? java.util.Arrays.asList(p.getAllowedLanguages().split(","))
                         : null)

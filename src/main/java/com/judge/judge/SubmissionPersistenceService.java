@@ -65,7 +65,7 @@ public class SubmissionPersistenceService {
                 p.getId(), p.getTimeLimitMs(), p.getMemoryLimitKb(),
                 p.getCheckerType(), p.getCheckerLanguage(), p.getCheckerBinPath(),
                 p.getComparisonMode(), p.getFloatEpsilon(), p.getJudgingMode(),
-                tcs, sts);
+                tcs, sts, FileIo.of(p));
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
