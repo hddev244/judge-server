@@ -114,6 +114,11 @@ public final class FileIo {
      * the input is copied in under its expected name plus lower/upper-case aliases, and after the
      * run the output file (matched case-insensitively) is copied to /metrics/{id}.out. If there is
      * neither a file nor (in FILE_OR_STDIO) any stdout, /metrics/{id}.nofile marks it.
+     *
+     * <p>Every external command costs a fork+exec (~0.5–1 ms) per case, so the script keeps to
+     * mkdir/cp/cp/rm on the common path: the workDir is fresh (no initial rm) and an output file
+     * spelled exactly as configured is found with the {@code [ -f ]} builtin; the
+     * {@code ls | grep} case-insensitive search only runs when it is not.
      */
     static String batchCaseScript(Spec spec, long id, String containerInput, String wallSecs,
                                   String absRunCmd) {
@@ -124,7 +129,7 @@ public final class FileIo {
         String stdout = spec.isStrict() ? "/dev/null" : "/metrics/" + id + ".stdout";
 
         StringBuilder sb = new StringBuilder();
-        sb.append("rm -rf ").append(box).append(" && mkdir -p ").append(box).append('\n');
+        sb.append("mkdir -p ").append(box).append('\n');
         sb.append("cp \"").append(containerInput).append("\" \"").append(box).append('/').append(in).append("\"\n");
         for (String alias : aliases(in)) {
             sb.append("ln -s \"").append(in).append("\" \"").append(box).append('/').append(alias).append("\"\n");
@@ -135,7 +140,11 @@ public final class FileIo {
         sb.append("EC=$?\n");
         sb.append("kill -9 -1 2>/dev/null\n");
         sb.append("echo $EC > /metrics/").append(id).append(".exit\n");
-        sb.append("OUTF=$(ls -1A ").append(box).append(" | grep -ixF -- \"").append(out).append("\" | head -n 1)\n");
+        sb.append("if [ -f \"").append(box).append('/').append(out).append("\" ]; then\n");
+        sb.append("  OUTF=\"").append(out).append("\"\n");
+        sb.append("else\n");
+        sb.append("  OUTF=$(ls -1A ").append(box).append(" | grep -ixF -- \"").append(out).append("\" | head -n 1)\n");
+        sb.append("fi\n");
         sb.append("if [ -n \"$OUTF\" ] && [ -f \"").append(box).append("/$OUTF\" ]; then\n");
         sb.append("  cp \"").append(box).append("/$OUTF\" /metrics/").append(id).append(".out\n");
         if (!spec.isStrict()) {

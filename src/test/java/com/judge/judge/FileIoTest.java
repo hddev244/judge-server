@@ -73,6 +73,10 @@ class FileIoTest {
         assertTrue(s.contains("cp \"/tests/7.in\" \"/box/7/BAI1.INP\""));
         assertTrue(s.contains("cd /box/7 && /code/solution < \"/dev/null\" > \"/dev/null\""));
         assertTrue(s.contains("grep -ixF -- \"BAI1.OUT\""));
+        // Fast path: exact name checked with the [ -f ] builtin before the ls|grep search.
+        int fast = s.indexOf("[ -f \"/box/7/BAI1.OUT\" ]");
+        assertTrue(fast >= 0 && fast < s.indexOf("grep -ixF"));
+        assertFalse(s.startsWith("rm "));
         assertTrue(s.contains(": > /metrics/7.nofile"));
         assertFalse(s.contains(".stdout"));
     }
