@@ -97,6 +97,10 @@ public class ProblemService {
         }
         problem = problemRepository.save(problem);
         problemTagRepository.deleteByProblemId(id);
+        // The derived delete only queues removals, and Hibernate flushes INSERTs before DELETEs:
+        // re-saving an unchanged tag would then hit problem_tags_problem_id_tag_key (500 on every
+        // update that keeps a tag). Flush the deletes first.
+        problemTagRepository.flush();
         List<String> tags = saveTags(problem, req.getTags());
         syncTopics(problem, req.getTopicIds());
         syncCategories(problem, req.getCategoryIds());
