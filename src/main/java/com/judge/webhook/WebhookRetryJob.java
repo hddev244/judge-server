@@ -31,8 +31,11 @@ public class WebhookRetryJob {
         log.info("Retrying {} webhooks", pending.size());
         for (WebhookRetry retry : pending) {
             try {
-                webhookSender.send(retry.getCallbackUrl(), retry.getPayload(),
-                        retry.getSignature(), retry.getSubmissionId());
+                // Re-signed with the current key: a row queued before a secret rotation would
+                // otherwise carry a signature the upstream now rejects.
+                webhookSender.deliver(retry.getCallbackUrl(), retry.getPayload(),
+                        webhookSender.signatureFor(retry.getPayload(), retry.getCallbackUrl()),
+                        retry.getSubmissionId());
                 retryRepository.delete(retry);
             } catch (Exception e) {
                 retry.setAttemptCount(retry.getAttemptCount() + 1);

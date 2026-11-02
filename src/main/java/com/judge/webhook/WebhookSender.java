@@ -49,24 +49,25 @@ public class WebhookSender {
         try {
             SubmissionResponse payload = SubmissionResponse.from(submission);
             String json = objectMapper.writeValueAsString(payload);
-            // Legacy protocol keys the HMAC with the callback URL, which every caller sees; a
-            // dedicated secret is the only signature an upstream can actually trust.
-            String signature = sign(json, hasDedicatedSecret() ? webhookSecret : submission.getCallbackUrl());
-            send(submission.getCallbackUrl(), json, signature, submission.getId());
+            send(submission.getCallbackUrl(), json, signatureFor(json, submission.getCallbackUrl()),
+                    submission.getId());
         } catch (Exception e) {
             log.error("Failed to send webhook for {}", submission.getId(), e);
         }
     }
 
-    public void send(String url, String json, String signature, String submissionId) {
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.set("X-Judge-Signature", signature);
-        headers.set("X-Judge-Submission-Id", submissionId);
+    /**
+     * Signature with the key currently configured. Legacy protocol keys the HMAC with the callback
+     * URL, which every caller sees; a dedicated secret is the only signature an upstream can trust.
+     */
+    public String signatureFor(String json, String callbackUrl) {
+        return sign(json, hasDedicatedSecret() ? webhookSecret : callbackUrl);
+    }
 
+    /** First delivery: a failure is queued in webhook_retries for {@link WebhookRetryJob}. */
+    public void send(String url, String json, String signature, String submissionId) {
         try {
-            restTemplate.postForEntity(url, new HttpEntity<>(json, headers), Void.class);
-            log.info("Webhook delivered for submission {}", submissionId);
+            deliver(url, json, signature, submissionId);
         } catch (Exception e) {
             log.warn("Webhook failed for {}, scheduling retry: {}", submissionId, e.getMessage());
             retryRepository.save(WebhookRetry.builder()
@@ -79,6 +80,21 @@ public class WebhookSender {
                     .failedPermanently(false)
                     .build());
         }
+    }
+
+    /**
+     * One POST that throws on failure. The retry job must use this rather than {@link #send}: send
+     * swallows the error and queues a fresh row, so the job used to delete the old row as
+     * "delivered" and the new one restarted at attempt 1 — an undeliverable webhook was retried
+     * every minute forever and never reached the permanent-failure cap.
+     */
+    public void deliver(String url, String json, String signature, String submissionId) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.set("X-Judge-Signature", signature);
+        headers.set("X-Judge-Submission-Id", submissionId);
+        restTemplate.postForEntity(url, new HttpEntity<>(json, headers), Void.class);
+        log.info("Webhook delivered for submission {}", submissionId);
     }
 
     public String sign(String payload, String secret) {
