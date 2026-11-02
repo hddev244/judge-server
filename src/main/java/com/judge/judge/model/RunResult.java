@@ -6,7 +6,14 @@ import lombok.Getter;
 @Getter
 @Builder
 public class RunResult {
+    /** Captured output, capped at judge.output-limit-bytes — for display/storage only. */
     private final String stdout;
+    /**
+     * Host path of the full captured output (the solution's stdout, or its output file in file-I/O
+     * mode). Judging reads this, never {@link #stdout}: an answer longer than the display cap must
+     * not be truncated into a false WA. Null when nothing was captured.
+     */
+    private final String outputPath;
     private final String stderr;
     private final int exitCode;
     /** CPU time (user+sys) in ms — this is what the TLE verdict and reported time use. */

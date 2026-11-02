@@ -490,7 +490,7 @@ public class JudgeService {
         if ("CUSTOM".equals(checkerType) && checkerBinPath != null) {
             try {
                 var cr = dockerRunner.runChecker(checkerBinPath, checkerLanguage,
-                        inputPath, expectedPath, rr.getStdout(), workDir);
+                        inputPath, expectedPath, rr.getStdout(), rr.getOutputPath(), workDir);
                 return new CaseOutcome(cr.verdict(), cr.ratio());
             } catch (IOException e) {
                 log.error("Checker error for input={}", inputPath, e);
@@ -498,7 +498,11 @@ public class JudgeService {
             }
         }
 
-        boolean ok = comparator.compare(rr.getStdout(), expectedPath, comparisonMode, floatEpsilon);
+        // Compare the full output on disk; rr.getStdout() is capped for display and would turn a
+        // correct answer longer than the cap into a WA.
+        boolean ok = rr.getOutputPath() != null
+                ? comparator.compareFiles(rr.getOutputPath(), expectedPath, comparisonMode, floatEpsilon)
+                : comparator.compare(rr.getStdout(), expectedPath, comparisonMode, floatEpsilon);
         return ok ? CaseOutcome.ac() : CaseOutcome.of("WA");
     }
 }

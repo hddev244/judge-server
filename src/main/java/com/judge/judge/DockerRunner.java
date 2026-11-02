@@ -271,6 +271,7 @@ public class DockerRunner {
                 }
 
                 int childExit = m != null ? m.exitStatus() : rawExit;
+                Path outFile = metricsDir.resolve(tc.id() + ".out");
                 if (childExit == 0 && Files.exists(metricsDir.resolve(tc.id() + ".nofile"))) {
                     results.put(tc.id(), RunResult.builder()
                             .stdout("")
@@ -286,6 +287,7 @@ public class DockerRunner {
                 }
                 results.put(tc.id(), RunResult.builder()
                         .stdout(outStr)
+                        .outputPath(Files.exists(outFile) ? outFile.toString() : null)
                         .stderr(errStr.isEmpty() ? (childExit != 0 ? "Process exited with code " + childExit : "") : errStr)
                         .exitCode(childExit)
                         .timeMs(cpuMs)
@@ -441,11 +443,23 @@ public class DockerRunner {
     public CheckerResult runChecker(String checkerDirPath, String checkerLanguage,
                                     String inputPath, String expectedPath,
                                     String actualOutput, String workDir) throws IOException {
+        return runChecker(checkerDirPath, checkerLanguage, inputPath, expectedPath, actualOutput, null, workDir);
+    }
+
+    /** {@code actualPath} (the full captured output) wins over the capped {@code actualOutput} string. */
+    public CheckerResult runChecker(String checkerDirPath, String checkerLanguage,
+                                    String inputPath, String expectedPath,
+                                    String actualOutput, String actualPath, String workDir) throws IOException {
         Path checkerDir = Path.of(checkerDirPath);
         // Legacy rows stored the binary path, not the dir — tolerate both.
         if (!Files.isDirectory(checkerDir)) checkerDir = checkerDir.getParent();
-        Path actualFile = Path.of(workDir, "actual.txt");
-        Files.writeString(actualFile, actualOutput);
+        Path actualFile;
+        if (actualPath != null && Files.exists(Path.of(actualPath))) {
+            actualFile = Path.of(actualPath);
+        } else {
+            actualFile = Path.of(workDir, "actual.txt");
+            Files.writeString(actualFile, actualOutput);
+        }
 
         String lang = checkerLanguage != null ? checkerLanguage : "cpp";
         String checkerCmd = switch (lang) {

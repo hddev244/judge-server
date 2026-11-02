@@ -4,6 +4,7 @@ import org.springframework.stereotype.Component;
 
 import java.io.BufferedReader;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -33,6 +34,78 @@ public class OutputComparator {
         } catch (IOException e) {
             return false;
         }
+    }
+
+    /**
+     * Same rules as {@link #compare(String, String, String, Double)}, but streams both files line by
+     * line so an answer of any size is compared in full without being held in memory.
+     */
+    public boolean compareFiles(String actualPath, String expectedPath, String mode, Double epsilon) {
+        boolean isFloat = "FLOAT".equalsIgnoreCase(mode);
+        double eps = epsilon != null ? epsilon : 1e-6;
+        try (BufferedReader er = Files.newBufferedReader(Path.of(expectedPath), StandardCharsets.UTF_8);
+             BufferedReader ar = Files.newBufferedReader(Path.of(actualPath), StandardCharsets.UTF_8)) {
+            NormalizedLines expected = new NormalizedLines(er);
+            NormalizedLines actual = new NormalizedLines(ar);
+            while (true) {
+                String e = expected.next();
+                String a = actual.next();
+                if (e == null || a == null) return e == null && a == null;
+                if (isFloat ? !floatLineEquals(e, a, eps) : !e.equals(a)) return false;
+            }
+        } catch (IOException | java.io.UncheckedIOException e) {
+            // Undecodable bytes or an unreadable file can't match a text answer.
+            return false;
+        }
+    }
+
+    /**
+     * Lines with trailing whitespace stripped, leading blank lines skipped and trailing blank lines
+     * dropped — the streaming twin of {@link #normalize(java.util.Iterator)}.
+     */
+    private static final class NormalizedLines {
+        private final BufferedReader reader;
+        private boolean started;
+        private int pendingBlanks;
+        private String held;
+
+        NormalizedLines(BufferedReader reader) {
+            this.reader = reader;
+        }
+
+        /** Next normalized line, or null at the end. */
+        String next() throws IOException {
+            if (pendingBlanks > 0) {
+                pendingBlanks--;
+                return "";
+            }
+            if (held != null) {
+                String line = held;
+                held = null;
+                return line;
+            }
+            String line;
+            while ((line = reader.readLine()) != null) {
+                line = stripTrailing(line);
+                if (line.isEmpty()) {
+                    if (started) pendingBlanks++;
+                    continue;
+                }
+                started = true;
+                if (pendingBlanks > 0) {
+                    held = line;
+                    pendingBlanks--;
+                    return "";
+                }
+                return line;
+            }
+            pendingBlanks = 0;
+            return null;
+        }
+    }
+
+    private boolean floatLineEquals(String e, String a, double eps) {
+        return floatEquals(List.of(e), List.of(a), eps);
     }
 
     private boolean floatEquals(List<String> expected, List<String> actual, double eps) {
